@@ -33,7 +33,7 @@ _DIABETIC_RETINOPATHY_DIAGNOSIS_DATA_DIR = os.path.join(
     DATA_DIR, "downloads", "manual", "diabetic_retinopathy_diagnosis")
 
 
-class DiabeticRetinopathyDiagnosisBecnhmark(Benchmark):
+class DiabeticRetinopathyDiagnosisBenchmark(Benchmark):
   """Diabetic retinopathy diagnosis benchmark class."""
 
   def __init__(self,
@@ -61,7 +61,7 @@ class DiabeticRetinopathyDiagnosisBecnhmark(Benchmark):
         raise
       else:
         logging.info(
-            "Data not found, `DiabeticRetinopathyDiagnosisBecnhmark.download_and_prepare()`"
+            "Data not found, `DiabeticRetinopathyDiagnosisBenchmark.download_and_prepare()`"
             " is now running...")
         self.download_and_prepare()
 
@@ -242,7 +242,7 @@ class DiabeticRetinopathyDiagnosisBecnhmark(Benchmark):
     except AssertionError as ae:
       raise AssertionError(
           str(ae) +
-          " Run DiabeticRetinopathyDiagnosisBecnhmark.download_and_prepare()"
+          " Run DiabeticRetinopathyDiagnosisBenchmark.download_and_prepare()"
           " first and then retry.")
 
     # Parse task level

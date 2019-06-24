@@ -14,11 +14,11 @@
 # ==============================================================================
 """Benchmarks registry handlers and definitions."""
 
-from ..diabetic_retinopathy_diagnosis.benchmark import DiabeticRetinopathyDiagnosisBecnhmark
+from ..diabetic_retinopathy_diagnosis.benchmark import DiabeticRetinopathyDiagnosisBenchmark
 
 # Internal registry containing <str registered_name, Benchmark subclass>
 _BENCHMARK_REGISTRY = {
-    "diabetic_retinopathy_diagnosis": DiabeticRetinopathyDiagnosisBecnhmark
+    "diabetic_retinopathy_diagnosis": DiabeticRetinopathyDiagnosisBenchmark
 }
 
 

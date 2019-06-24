@@ -36,7 +36,7 @@ def VGGDrop(dropout_rate, num_base_filters, learning_rate, l2_reg, input_shape):
   import tensorflow as tf
   tfk = tf.keras
   tfkl = tfk.layers
-  from bdlb.diabetic_retinopathy_diagnosis.benchmark import DiabeticRetinopathyDiagnosisBecnhmark
+  from bdlb.diabetic_retinopathy_diagnosis.benchmark import DiabeticRetinopathyDiagnosisBenchmark
 
   # Feedforward neural network
   model = tfk.Sequential([
@@ -149,9 +149,9 @@ def VGGDrop(dropout_rate, num_base_filters, learning_rate, l2_reg, input_shape):
       tfkl.Activation("sigmoid")
   ])
 
-  model.compile(loss=DiabeticRetinopathyDiagnosisBecnhmark.loss(),
+  model.compile(loss=DiabeticRetinopathyDiagnosisBenchmark.loss(),
                 optimizer=tfk.optimizers.Adam(learning_rate),
-                metrics=DiabeticRetinopathyDiagnosisBecnhmark.metrics())
+                metrics=DiabeticRetinopathyDiagnosisBenchmark.metrics())
 
   return model
 
