@@ -1,0 +1,17 @@
+name: BDLB
+channels:
+  - conda-forge
+dependencies:
+  - python
+  - jupyter
+  - jupyterlab
+  - matplotlib
+  - scipy
+  - kaggle
+  - opencv
+  - pip
+  - pip:
+    - tensorflow-gpu==2.0.0b1
+    - tensorflow-datasets
+    - gdown
+    - -e .
