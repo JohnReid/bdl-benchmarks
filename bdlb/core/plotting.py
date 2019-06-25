@@ -18,7 +18,7 @@
 def tfk_history(history, output_dir=None, **ax_set_kwargs):
   """Visualization of `tensorflow.keras.callbacks.History`,
   similar to `TensorBoard`, in train and validation.
-  
+
   Args:
     history: `tensorflow.keras.callbacks.History`, the logs of
       training a `tensorflow.keras.Model`.
@@ -33,7 +33,7 @@ def tfk_history(history, output_dir=None, **ax_set_kwargs):
     raise TypeError("`history` was expected to be of type "
                     "`tensorflow.keras.callbacks.History`, "
                     "but {} was provided.".format(type(history)))
-  for metric in [k for k in history.history.keys() if not "val_" in k]:
+  for metric in [k for k in history.history.keys() if "val_" not in k]:
     fig, ax = plt.subplots()
     ax.plot(history.history.get(metric), label="train")
     ax.plot(history.history.get("val_{}".format(metric)), label="validation")
@@ -56,7 +56,7 @@ def leaderboard(benchmark,
                 **ax_set_kwargs):
   """Generates a leaderboard for all metrics in `benchmark`,
   by appending the (optional) `results`.
-  
+
   Args:
     benchmark: `str`, the registerd name of `bdlb.Benchmark`.
     results: (optional) `dict`, dictionary of `pandas.DataFrames`
