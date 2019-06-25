@@ -39,7 +39,7 @@ def VGGFlipout(num_base_filters, learning_rate, input_shape):
   tfkl = tfk.layers
   import tensorflow_probability as tfp
   tfpl = tfp.layers
-  from bdlb.diabetic_retinopathy_diagnosis.benchmark import DiabeticRetinopathyDiagnosisBecnhmark
+  from bdlb.diabetic_retinopathy_diagnosis.benchmark import DiabeticRetinopathyDiagnosisBenchmark
 
   # Feedforward neural network
   model = tfk.Sequential([
@@ -127,9 +127,9 @@ def VGGFlipout(num_base_filters, learning_rate, input_shape):
       tfkl.Activation("sigmoid")
   ])
 
-  model.compile(loss=DiabeticRetinopathyDiagnosisBecnhmark.loss(),
+  model.compile(loss=DiabeticRetinopathyDiagnosisBenchmark.loss(),
                 optimizer=tfk.optimizers.Adam(learning_rate),
-                metrics=DiabeticRetinopathyDiagnosisBecnhmark.metrics())
+                metrics=DiabeticRetinopathyDiagnosisBenchmark.metrics())
 
   return model
 

@@ -61,7 +61,7 @@ chmod 600 ~/.kaggle/kaggle.json
 Download and prepare the data by running:
 
 ```
-python3 -u -c "from bdlb.diabetic_retinopathy_diagnosis.benchmark import DiabeticRetinopathyDiagnosisBecnhmark; DiabeticRetinopathyDiagnosisBecnhmark.download_and_prepare()"
+python3 -u -c "from bdlb.diabetic_retinopathy_diagnosis.benchmark import DiabeticRetinopathyDiagnosisBenchmark; DiabeticRetinopathyDiagnosisBenchmark.download_and_prepare()"
 ```
 
 ## Run a Baseline
