@@ -19,7 +19,6 @@ from __future__ import division
 from __future__ import print_function
 
 import os
-import collections
 
 from absl import logging
 
@@ -42,7 +41,7 @@ class DiabeticRetinopathyDiagnosisBecnhmark(Benchmark):
                data_dir=None,
                download_and_prepare=False):
     """Constructs a benchmark object.
-    
+
     Args:
       level: `Level` or `str, downstream task level.
       batch_size: (optional) `int`, number of datapoints
@@ -68,7 +67,7 @@ class DiabeticRetinopathyDiagnosisBecnhmark(Benchmark):
   @classmethod
   def evaluate(cls, estimator, dataset, output_dir=None, name=None):
     """Evaluates an `estimator` on the `mode` benchmark dataset.
-    
+
     Args:
       estimator: `lambda x: mu_x, uncertainty_x`, an uncertainty estimation
         function, which returns `mean_x` and predictive `uncertainty_x`.
@@ -80,8 +79,6 @@ class DiabeticRetinopathyDiagnosisBecnhmark(Benchmark):
     import tqdm
     import numpy as np
     import tensorflow_datasets as tfds
-    from sklearn.metrics import roc_auc_score
-    from sklearn.metrics import accuracy_score
     import matplotlib.pyplot as plt
     COLORS = plt.rcParams['axes.prop_cycle'].by_key()['color']
 
@@ -130,7 +127,7 @@ class DiabeticRetinopathyDiagnosisBecnhmark(Benchmark):
                        name=None):
     """Evaluate model predictive distribution on `metric_fn`
     at data retain `fractions`.
-    
+
     Args:
       y_true: `numpy.ndarray`, the ground truth labels, with shape [N].
       y_pred: `numpy.ndarray`, the model predictions, with shape [N].
@@ -226,7 +223,6 @@ class DiabeticRetinopathyDiagnosisBecnhmark(Benchmark):
         * validation: `tf.data.Dataset`, validation dataset.
         * test: `tf.data.Dataset`, test dataset.
     """
-    import numpy as np
     import tensorflow as tf
     import tensorflow_datasets as tfds
     from ..core.benchmark import DataSplits
@@ -274,14 +270,14 @@ class DiabeticRetinopathyDiagnosisBecnhmark(Benchmark):
   def download_and_prepare(cls, levels=None):
     """Downloads dataset from Kaggle, extracts zip files
     and processes it using `tensorflow_datasets`.
-    
+
     Args:
       levels: (optional) `iterable` of `str`, specifies which
         levels from {'medium', 'realworld'} to prepare,
         if None it prepares all the levels.
 
     Raises:
-      OSError: if `~/.kaggle/kaggle.json` is not set up. 
+      OSError: if `~/.kaggle/kaggle.json` is not set up.
     """
     # Disable GPU for data download, extraction and preparation
     import os
@@ -293,9 +289,9 @@ class DiabeticRetinopathyDiagnosisBecnhmark(Benchmark):
   @staticmethod
   def _download():
     """Downloads data from Kaggle using `tensorflow_datasets`.
-    
+
     Raises:
-      OSError: if `~/.kaggle/kaggle.json` is not set up. 
+      OSError: if `~/.kaggle/kaggle.json` is not set up.
     """
     import subprocess as sp
     import tensorflow_datasets as tfds
@@ -363,7 +359,6 @@ class DiabeticRetinopathyDiagnosisBecnhmark(Benchmark):
   @staticmethod
   def _prepare(levels=None):
     """Generates the TFRecord objects for medium and realworld experiments."""
-    import multiprocessing
     from absl import logging
     from .tfds_adapter import DiabeticRetinopathyDiagnosis
     # Hangle each level individually
@@ -377,8 +372,6 @@ class DiabeticRetinopathyDiagnosisBecnhmark(Benchmark):
     """Applies transformations to the raw data."""
     import numpy as np
     import tensorflow as tf
-    import tensorflow_datasets as tfds
-    cv2 = tfds.core.lazy_imports.cv2
 
     # Transformation hyperparameters
     mean = np.asarray([0.42606387, 0.29752496, 0.21309826])
