@@ -22,16 +22,31 @@ from __future__ import print_function
 import os
 import functools
 
-from absl import app
-from absl import flags
-from absl import logging
-import tensorflow as tf
-tfk = tf.keras
-
 import bdlb
 from bdlb.core import plotting
 from baselines.diabetic_retinopathy_diagnosis.mc_dropout.model import VGGDrop
 from baselines.diabetic_retinopathy_diagnosis.mc_dropout.model import predict
+
+from absl import app
+from absl import flags
+import tensorflow as tf
+tfk = tf.keras
+
+
+#
+# Following advice here to limit memory growth on TF 2.0
+# https://www.tensorflow.org/beta/guide/using_gpu#limiting_gpu_memory_growth
+gpus = tf.config.experimental.list_physical_devices('GPU')
+if gpus:
+  try:
+    # Currently, memory growth needs to be the same across GPUs
+    for gpu in gpus:
+      tf.config.experimental.set_memory_growth(gpu, True)
+    logical_gpus = tf.config.experimental.list_logical_devices('GPU')
+    print(len(gpus), "Physical GPUs,", len(logical_gpus), "Logical GPUs")
+  except RuntimeError as e:
+    # Memory growth must be set before GPUs have been initialized
+    print(e)
 
 ##########################
 # Command line arguments #
