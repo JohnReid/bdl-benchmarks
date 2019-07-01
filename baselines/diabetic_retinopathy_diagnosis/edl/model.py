@@ -59,16 +59,19 @@ def KL(alpha, K):
 def mse_loss(y, alpha):
   #
   # alpha sums and means
-  S = tf.reduce_sum(alpha, axis=1, name="S")
-  phat = alpha / S
+  S = tf.reduce_sum(alpha, axis=1, keepdims=True, name="S")
+  print('alpha: ', alpha)
+  print('S: ', S)
+  phat = tf.divide(alpha, S, name='phat')
   #
   # Error term
-  E = (y - phat)**2
+  residuals = tf.subtract(y, phat, name='residuals')
+  E = tf.square(residuals, name='E')
   #
   # Variance term
-  V = phat * (1 - phat) / (S + 1)
+  V = tf.multiply(phat, (1 - phat) / (S + 1), name='V')
   #
-  return tf.reduce_sum(E, axis=1) + tf.reduce_sum(V, axis=1)
+  return tf.add(tf.reduce_sum(E, axis=1), tf.reduce_sum(V, axis=1), name='mse_loss')
 
 
 def loss_regulariser(alpha, other=None):
@@ -123,6 +126,124 @@ def make_loss(losstype, epoch, EDL_func=tf.math.digamma):
   else:
     raise ValueError('Unknown loss: {}'.format(losstype))
   return loss
+
+
+def EDL_model(logits_model,
+              input_shape,
+              learning_rate,
+              global_step,
+              epoch,
+              logits_to_evidence=exp_evidence):
+  """Convert logits to alpha
+
+  Args:
+    logits: Model to predict logits.
+    learning_rate: `float`, ADAM optimizer learning rate.
+
+  Results:
+    A compiled model.
+  """
+  from bdlb.diabetic_retinopathy_diagnosis.benchmark import DiabeticRetinopathyDiagnosisBenchmark
+
+  # Feedforward neural network
+  inputs = tfk.Input(shape=input_shape)
+
+  #
+  # Calculate the evidence from the logits calculated by the logits model
+  evidence = logits_to_evidence(logits_model(inputs))
+
+  #
+  # Alpha is the parameter for the Dirichlet, alpha0 is the sum
+  alpha = tf.add(evidence, 1, name='alpha')
+  alpha0 = tf.reduce_sum(alpha, axis=1, keepdims=True, name='alpha_zero')
+
+  #
+  # Calculate the mean probabilities
+  p = tf.divide(alpha, alpha0, name='p')
+
+  #
+  # The output is the probability of a positive classification
+  # outputs = p[:, 1]  # This didn't work
+  outputs = tf.slice(p, [0, 1], [-1, -1], name='outputs')
+
+  #
+  # Create the loss function using function closure of alpha
+  def custom_loss(y_true, _):
+    print('y_true: ', y_true)
+    print('_: ', _)
+    # Why must we index y_true? It seems to have shape (None, None). Shouldn't this be (None,) or (None, 1)?
+    y_correct_dim = y_true[:, 0]
+    # Why must we cast this here? Is there no way to tell Keras that y_true will be int?
+    y_true_int = tf.cast(y_correct_dim, tf.int32)
+    # Make one-hot for MSE loss
+    y_one_hot = tf.one_hot(y_true_int, depth=2, name="y_one_hot")
+    # print('y one hot: ', y_one_hot)
+    loss = make_loss('mse', epoch=epoch)(y_one_hot, alpha)
+    print('Loss: ', loss)
+    return loss
+
+  #
+  # Compile the model
+  print('Inputs: ', inputs)
+  print('Alpha: ', alpha)
+  print('Outputs: ', outputs)
+  model = tfkm.Model(inputs=inputs, outputs=outputs)
+  model.compile(loss=custom_loss,
+                optimizer=tfk.optimizers.Adam(learning_rate),
+                metrics=DiabeticRetinopathyDiagnosisBenchmark.metrics())
+  return model
+
+
+def predict(x, model, num_samples, type="entropy"):
+    """EDL uncertainty estimator.
+
+    Args:
+      x: `numpy.ndarray`, datapoints from input space,
+        with shape [B, H, W, 3], where B the batch size and
+        H, W the input images height and width accordingly.
+      model: `tensorflow.keras.Model`, a probabilistic model,
+        which accepts input with shape [B, H, W, 3] and
+        outputs sigmoid probability [0.0, 1.0], and also
+        accepts boolean arguments `training=True` for enabling
+        dropout at test time.
+      num_samples: `int`, number of Monte Carlo samples
+        (i.e. forward passes from dropout) used for
+        the calculation of predictive mean and uncertainty.
+      type: (optional) `str`, type of uncertainty returns,
+        one of {"entropy", "stddev"}.
+
+    Returns:
+      mean: `numpy.ndarray`, predictive mean, with shape [B].
+      uncertainty: `numpy.ndarray`, uncertainty in prediction,
+        with shape [B].
+    """
+    import scipy.stats
+
+    # Get shapes of data
+    B, _, _, _ = x.shape
+
+    # Monte Carlo samples from different dropout mask at test time
+    mc_samples = np.asarray([model(x, training=True)
+                             for _ in range(num_samples)]).reshape(-1, B)
+
+    # Bernoulli output distribution
+    dist = scipy.stats.bernoulli(mc_samples.mean(axis=0))
+
+    # Predictive mean calculation
+    mean = dist.mean()
+
+    # Use predictive entropy for uncertainty
+    if type == "entropy":
+        uncertainty = dist.entropy()
+    # Use predictive standard deviation for uncertainty
+    elif type == "stddev":
+        uncertainty = dist.std()
+    else:
+        raise ValueError(
+            "Unrecognized type={} provided, use one of {'entropy', 'stddev'}".
+            format(type))
+
+    return mean, uncertainty
 
 
 def VGG_model(dropout_rate,
@@ -251,121 +372,3 @@ def VGG_model(dropout_rate,
       # Fully-connected - now we need two outputs
       tfkl.Dense(output_dim, kernel_regularizer=tfk.regularizers.l2(l2_reg)),
   ])
-
-
-def EDL_model(logits_model,
-              input_shape,
-              learning_rate,
-              global_step,
-              epoch,
-              logits_to_evidence=exp_evidence):
-  """Convert logits to alpha
-
-  Args:
-    logits: Model to predict logits.
-    learning_rate: `float`, ADAM optimizer learning rate.
-
-  Results:
-    A compiled model.
-  """
-  from bdlb.diabetic_retinopathy_diagnosis.benchmark import DiabeticRetinopathyDiagnosisBenchmark
-
-  # Feedforward neural network
-  inputs = tfk.Input(shape=input_shape)
-
-  #
-  # Calculate the evidence from the logits calculated by the logits model
-  evidence = logits_to_evidence(logits_model(inputs))
-
-  #
-  # Alpha is the parameter for the Dirichlet, alpha0 is the sum
-  alpha = tf.add(evidence, 1, name='alpha')
-  alpha0 = tf.reduce_sum(alpha, axis=1, keepdims=True, name='alpha_zero')
-
-  #
-  # Calculate the mean probabilities
-  p = tf.divide(alpha, alpha0, name='p')
-
-  #
-  # The output is the probability of a positive classification
-  # outputs = p[:, 1]  # This didn't work
-  outputs = tf.slice(p, [0, 1], [-1, -1], name='outputs')
-
-  #
-  # Create the loss function using function closure of alpha
-  def custom_loss(y_true, _):
-    print('y_true: ', y_true)
-    print('_: ', _)
-    # Why must we index y_true? It seems to have shape (None, None). Shouldn't this be (None,) or (None, 1)?
-    y_correct_dim = y_true[:, 0]
-    # Why must we cast this here? Is there no way to tell Keras that y_true will be int?
-    y_true_int = tf.cast(y_correct_dim, tf.int32)
-    # Make one-hot for MSE loss
-    y_one_hot = tf.one_hot(y_true_int, depth=2, name="y_one_hot")
-    # print('y one hot: ', y_one_hot)
-    loss = make_loss('mse', epoch=epoch)(y_one_hot, alpha)
-    print('Loss: ', loss)
-    return loss
-
-  #
-  # Compile the model
-  print('Inputs: ', inputs)
-  print('Alpha: ', alpha)
-  print('Outputs: ', outputs)
-  model = tfkm.Model(inputs=inputs, outputs=outputs)
-  model.compile(loss=custom_loss,
-                optimizer=tfk.optimizers.Adam(learning_rate),
-                metrics=DiabeticRetinopathyDiagnosisBenchmark.metrics())
-  return model
-
-
-def predict(x, model, num_samples, type="entropy"):
-    """EDL uncertainty estimator.
-
-    Args:
-      x: `numpy.ndarray`, datapoints from input space,
-        with shape [B, H, W, 3], where B the batch size and
-        H, W the input images height and width accordingly.
-      model: `tensorflow.keras.Model`, a probabilistic model,
-        which accepts input with shape [B, H, W, 3] and
-        outputs sigmoid probability [0.0, 1.0], and also
-        accepts boolean arguments `training=True` for enabling
-        dropout at test time.
-      num_samples: `int`, number of Monte Carlo samples
-        (i.e. forward passes from dropout) used for
-        the calculation of predictive mean and uncertainty.
-      type: (optional) `str`, type of uncertainty returns,
-        one of {"entropy", "stddev"}.
-
-    Returns:
-      mean: `numpy.ndarray`, predictive mean, with shape [B].
-      uncertainty: `numpy.ndarray`, uncertainty in prediction,
-        with shape [B].
-    """
-    import scipy.stats
-
-    # Get shapes of data
-    B, _, _, _ = x.shape
-
-    # Monte Carlo samples from different dropout mask at test time
-    mc_samples = np.asarray([model(x, training=True)
-                             for _ in range(num_samples)]).reshape(-1, B)
-
-    # Bernoulli output distribution
-    dist = scipy.stats.bernoulli(mc_samples.mean(axis=0))
-
-    # Predictive mean calculation
-    mean = dist.mean()
-
-    # Use predictive entropy for uncertainty
-    if type == "entropy":
-        uncertainty = dist.entropy()
-    # Use predictive standard deviation for uncertainty
-    elif type == "stddev":
-        uncertainty = dist.std()
-    else:
-        raise ValueError(
-            "Unrecognized type={} provided, use one of {'entropy', 'stddev'}".
-            format(type))
-
-    return mean, uncertainty
