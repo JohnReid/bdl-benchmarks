@@ -99,7 +99,7 @@ def mse_regularised_loss(y, alpha, lambda_t, sample_weight=None):
 
 def EDL_loss(func=tf.math.digamma):
   """Evidential deep learning loss."""
-  def loss_func(p, alpha, global_step, epoch):
+  def loss_func(p, alpha, epoch):
     S = tf.reduce_sum(alpha, axis=1, keepdims=True)
     E = alpha - 1
 
@@ -131,7 +131,6 @@ def make_loss(losstype, epoch, EDL_func=tf.math.digamma):
 def EDL_model(logits_model,
               input_shape,
               learning_rate,
-              global_step,
               epoch,
               logits_to_evidence=exp_evidence):
   """Convert logits to alpha

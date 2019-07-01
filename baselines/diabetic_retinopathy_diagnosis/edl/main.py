@@ -128,8 +128,7 @@ def main(argv):
   # Hyperparmeters & Model #
   ##########################
   input_shape = dict(medium=(256, 256, 3), realworld=(512, 512, 3))[FLAGS.level]
-  global_step = tf.Variable(initial_value=0, name='global_step', trainable=False)
-  epoch = tf.Variable(initial_value=0, name='epoch', trainable=False)
+  epoch = tf.Variable(initial_value=0, name="epoch_counter", trainable=False)
   logits = model.VGG_model(dropout_rate=FLAGS.dropout_rate,
                            num_base_filters=FLAGS.num_base_filters,
                            l2_reg=FLAGS.l2_reg,
@@ -138,7 +137,6 @@ def main(argv):
   classifier = model.EDL_model(logits,
                                input_shape,
                                learning_rate=FLAGS.learning_rate,
-                               global_step=global_step,
                                epoch=epoch)
   classifier.summary()
 
