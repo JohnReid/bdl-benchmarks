@@ -204,7 +204,7 @@ def EDL_model(logits_model,
   metrics += additional_metrics
   model.compile(loss=[None, custom_loss],
                 optimizer=tfk.optimizers.Adam(learning_rate),
-                metrics=[None, metrics])
+                metrics=[[], metrics])
   return model
 
 
@@ -228,7 +228,6 @@ def predict(x, model, type="entropy"):
     uncertainty: `numpy.ndarray`, uncertainty in prediction,
       with shape [B].
   """
-  from scipy.stats import dirichlet
   #
   # Get shapes of data
   B, _, _, _ = x.shape
