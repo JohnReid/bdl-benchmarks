@@ -21,6 +21,7 @@ from __future__ import print_function
 
 import os
 import functools
+import datetime
 
 import bdlb
 from bdlb.core import plotting
@@ -124,11 +125,15 @@ def main(argv):
   ds_train, ds_validation, ds_test = dtask.datasets
   assert isinstance(ds_train, tf.data.Dataset)
 
+  def epoch_metric(y_true, y_pred):
+    return epoch_counter.value()
+
   ##########################
   # Hyperparmeters & Model #
   ##########################
   input_shape = dict(medium=(256, 256, 3), realworld=(512, 512, 3))[FLAGS.level]
-  epoch = tf.Variable(initial_value=0, name="epoch_counter", trainable=False)
+  epoch_counter = tf.Variable(initial_value=0, name="epoch_counter", trainable=False)
+  tf.summary.scalar('epoch_counter', epoch_counter)
   logits = model.VGG_model(dropout_rate=FLAGS.dropout_rate,
                            num_base_filters=FLAGS.num_base_filters,
                            l2_reg=FLAGS.l2_reg,
@@ -137,22 +142,29 @@ def main(argv):
   classifier = model.EDL_model(logits,
                                input_shape,
                                learning_rate=FLAGS.learning_rate,
-                               epoch=epoch)
+                               epoch=epoch_counter,
+                               additional_metrics=[epoch_metric])
   classifier.summary()
+
+  @tf.function
+  def increment_epoch():
+    "Increment the epoch counter variable."
+    epoch_counter.assign_add(1)
 
   #################
   # Training Loop #
   #################
-  increment_epoch_op = epoch.assign_add(1)
+  current_time = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
+  log_dir = os.path.join(FLAGS.output_dir, "tensorboard", current_time)
   history = classifier.fit(
       ds_train,
       epochs=FLAGS.num_epochs,
       validation_data=ds_validation,
       class_weight=dtask.class_weight(),
       callbacks=[
-          tfk.callbacks.LambdaCallback(on_epoch_end=lambda epoch, logs: tfkb.get_session().run(increment_epoch_op)),
+          tfk.callbacks.LambdaCallback(on_epoch_end=lambda epoch, logs: increment_epoch()),
           tfk.callbacks.TensorBoard(
-              log_dir=os.path.join(FLAGS.output_dir, "tensorboard"),
+              log_dir=log_dir,
               update_freq="epoch",
               write_graph=True,
               histogram_freq=1,
@@ -168,8 +180,7 @@ def main(argv):
           )
       ],
   )
-  plotting.tfk_history(history,
-                       output_dir=os.path.join(FLAGS.output_dir, "history"))
+  plotting.tfk_history(history, output_dir=os.path.join(FLAGS.output_dir, "history"))
 
   ##############
   # Evaluation #

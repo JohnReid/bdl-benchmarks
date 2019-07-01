@@ -132,7 +132,8 @@ def EDL_model(logits_model,
               input_shape,
               learning_rate,
               epoch,
-              logits_to_evidence=exp_evidence):
+              logits_to_evidence=exp_evidence,
+              additional_metrics=[]):
   """Convert logits to alpha
 
   Args:
@@ -189,7 +190,7 @@ def EDL_model(logits_model,
   model = tfkm.Model(inputs=inputs, outputs=outputs)
   model.compile(loss=custom_loss,
                 optimizer=tfk.optimizers.Adam(learning_rate),
-                metrics=DiabeticRetinopathyDiagnosisBenchmark.metrics())
+                metrics=DiabeticRetinopathyDiagnosisBenchmark.metrics() + additional_metrics)
   return model
 
 
