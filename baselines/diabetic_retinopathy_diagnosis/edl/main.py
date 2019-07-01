@@ -155,7 +155,7 @@ def main(argv):
   # Training Loop #
   #################
   current_time = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
-  log_dir = os.path.join(FLAGS.output_dir, "tensorboard", current_time)
+  log_dir = os.path.join(FLAGS.output_dir, 'BDLB', 'EDL', 'tensorboard', current_time)
   history = classifier.fit(
       ds_train,
       epochs=FLAGS.num_epochs,
