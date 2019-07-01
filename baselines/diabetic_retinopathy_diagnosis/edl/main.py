@@ -55,7 +55,7 @@ if gpus:
 FLAGS = flags.FLAGS
 flags.DEFINE_string(
     name="output_dir",
-    default="/tmp",
+    default=os.path.join('/tmp', 'BDLB'),
     help="Path to store model, tensorboard and report outputs.",
 )
 flags.DEFINE_enum(
@@ -74,11 +74,6 @@ flags.DEFINE_integer(
     default=50,
     help="Number of epochs of training over the whole training set.",
 )
-# flags.DEFINE_integer(
-#     name="num_mc_samples",
-#     default=10,
-#     help="Number of Monte Carlo samples used for uncertainty estimation.",
-# )
 flags.DEFINE_enum(
     name="uncertainty",
     default="entropy",
@@ -113,6 +108,22 @@ def main(argv):
   print(argv)
   print(FLAGS)
 
+  #
+  # Logging / tensorboard
+  #
+  current_time = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
+  out_dir = os.path.join(FLAGS.output_dir, 'EDL', current_time)
+  file_writer = tf.summary.create_file_writer(os.path.join(os.path.join(out_dir, 'summary')))
+  file_writer.set_as_default()
+
+  def epoch_metric(y_true, y_pred):
+    return epoch_counter.value()
+
+  @tf.function
+  def increment_epoch():
+    "Increment the epoch counter variable."
+    epoch_counter.assign_add(1)
+
   #############
   # Load Task #
   #############
@@ -125,15 +136,13 @@ def main(argv):
   ds_train, ds_validation, ds_test = dtask.datasets
   assert isinstance(ds_train, tf.data.Dataset)
 
-  def epoch_metric(y_true, y_pred):
-    return epoch_counter.value()
-
   ##########################
   # Hyperparmeters & Model #
   ##########################
   input_shape = dict(medium=(256, 256, 3), realworld=(512, 512, 3))[FLAGS.level]
-  epoch_counter = tf.Variable(initial_value=0, name="epoch_counter", trainable=False)
-  tf.summary.scalar('epoch_counter', epoch_counter)
+  epoch_counter = tf.Variable(initial_value=0, name="epoch_counter", trainable=False, dtype=tf.int64)
+  tf.summary.experimental.set_step(epoch_counter)
+  # tf.summary.scalar('epoch_counter', epoch_counter)
   logits = model.VGG_model(dropout_rate=FLAGS.dropout_rate,
                            num_base_filters=FLAGS.num_base_filters,
                            l2_reg=FLAGS.l2_reg,
@@ -144,17 +153,11 @@ def main(argv):
                                learning_rate=FLAGS.learning_rate,
                                epoch=epoch_counter)
   classifier.summary()
-
-  @tf.function
-  def increment_epoch():
-    "Increment the epoch counter variable."
-    epoch_counter.assign_add(1)
+  print('********** Output dir: {} ************'.format(out_dir))
 
   #################
   # Training Loop #
   #################
-  current_time = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
-  log_dir = os.path.join(FLAGS.output_dir, 'BDLB', 'EDL', 'tensorboard', current_time)
   history = classifier.fit(
       ds_train,
       epochs=FLAGS.num_epochs,
@@ -163,33 +166,29 @@ def main(argv):
       callbacks=[
           tfk.callbacks.LambdaCallback(on_epoch_end=lambda epoch, logs: increment_epoch()),
           tfk.callbacks.TensorBoard(
-              log_dir=log_dir,
+              log_dir=os.path.join(out_dir, 'fit'),
               update_freq="epoch",
               write_graph=True,
               histogram_freq=1,
           ),
           tfk.callbacks.ModelCheckpoint(
-              filepath=os.path.join(
-                  FLAGS.output_dir,
-                  "checkpoints",
-                  "weights-{epoch}.ckpt",
-              ),
+              filepath=os.path.join(out_dir, "checkpoints", "weights-{epoch}.ckpt"),
               verbose=1,
               save_weights_only=True,
           )
       ],
   )
-  plotting.tfk_history(history, output_dir=os.path.join(FLAGS.output_dir, "history"))
+  plotting.tfk_history(history, output_dir=os.path.join(out_dir, "history"))
 
   ##############
   # Evaluation #
   ##############
-  dtask.evaluate(functools.partial(model.predict,
-                                   model=classifier,
-                                   num_samples=FLAGS.num_mc_samples,
-                                   type=FLAGS.uncertainty),
-                 dataset=ds_test,
-                 output_dir=FLAGS.output_dir)
+  evaluation = dtask.evaluate(functools.partial(model.predict,
+                                                model=classifier,
+                                                type=FLAGS.uncertainty),
+                              dataset=ds_test,
+                              output_dir=os.path.join(out_dir, 'evaluation'))
+  print(evaluation)
 
 
 if __name__ == "__main__":

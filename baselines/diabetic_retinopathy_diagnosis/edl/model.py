@@ -79,18 +79,24 @@ def loss_regulariser(alpha, other=None):
   """
   if other is None:
     other = tfd.Dirichlet(tf.ones(alpha.shape[-1]))
-  return tfd.Dirichlet(alpha).kl_divergence(other)
+  regulariser = tfd.Dirichlet(alpha).kl_divergence(other, name='regulariser')
+  tf.summary.histogram('regulariser', data=regulariser)
+  return regulariser
 
 
 def annealing_coefficient(epoch):
   """The annealing coefficient grows as the number of epochs to a maximum of 1.
   """
-  return tf.minimum(1.0, tf.cast(epoch / 10, tf.float32))
+  coef = tf.minimum(1.0, tf.cast(epoch / 10, tf.float32))
+  tf.summary.scalar('annealing coefficient', data=coef, step=epoch)
+  return coef
 
 
 def mse_regularised_loss(y, alpha, lambda_t, sample_weight=None):
   regularisation_term = lambda_t * loss_regulariser(alpha)
   mse_term = mse_loss(y, alpha)
+  tf.summary.histogram('regularisation term', data=regularisation_term)
+  tf.summary.histogram('mse term', data=mse_term)
   # print('y: ', y)
   # print('Regularisation: ', regularisation_term)
   # print('MSE term: ', mse_term)
@@ -105,7 +111,7 @@ def EDL_loss(func=tf.math.digamma):
 
     A = tf.reduce_mean(tf.reduce_sum(p * (func(S) - func(alpha)), 1, keepdims=True))
 
-    annealing_coef = tf.minimum(1.0, tf.cast(epoch / 10, tf.float32))
+    annealing_coef = annealing_coefficient(epoch)
 
     alp = E * (1 - p) + 1
     B = annealing_coef * KL(alp)
@@ -156,6 +162,11 @@ def EDL_model(logits_model,
   # Alpha is the parameter for the Dirichlet, alpha0 is the sum
   alpha = tf.add(evidence, 1, name='alpha')
   alpha0 = tf.reduce_sum(alpha, axis=1, keepdims=True, name='alpha_zero')
+  dirichlet = tfd.Dirichlet(alpha)
+  entropy = dirichlet.entropy()
+
+  def entropy_mean(y_true, y_pred):
+    return tf.reduce_mean(entropy, name='entropy_mean')
 
   #
   # Calculate the mean probabilities
@@ -164,7 +175,7 @@ def EDL_model(logits_model,
   #
   # The output is the probability of a positive classification
   # outputs = p[:, 1]  # This didn't work
-  outputs = tf.slice(p, [0, 1], [-1, -1], name='outputs')
+  p_pos = tf.slice(p, [0, 1], [-1, -1], name='p_pos')
 
   #
   # Create the loss function using function closure of alpha
@@ -184,66 +195,91 @@ def EDL_model(logits_model,
 
   #
   # Compile the model
-  print('Inputs: ', inputs)
-  print('Alpha: ', alpha)
-  print('Outputs: ', outputs)
-  model = tfkm.Model(inputs=inputs, outputs=outputs)
-  model.compile(loss=custom_loss,
+  print('inputs: ', inputs)
+  print('alpha: ', alpha)
+  print('p_pos: ', p_pos)
+  model = tfkm.Model(inputs=inputs, outputs=[alpha, p_pos])
+  metrics = DiabeticRetinopathyDiagnosisBenchmark.metrics()
+  metrics.append(entropy_mean)
+  metrics += additional_metrics
+  model.compile(loss=[None, custom_loss],
                 optimizer=tfk.optimizers.Adam(learning_rate),
-                metrics=DiabeticRetinopathyDiagnosisBenchmark.metrics() + additional_metrics)
+                metrics=[None, metrics])
   return model
 
 
-def predict(x, model, num_samples, type="entropy"):
-    """EDL uncertainty estimator.
+def predict(x, model, type="entropy"):
+  """EDL uncertainty estimator.
 
-    Args:
-      x: `numpy.ndarray`, datapoints from input space,
-        with shape [B, H, W, 3], where B the batch size and
-        H, W the input images height and width accordingly.
-      model: `tensorflow.keras.Model`, a probabilistic model,
-        which accepts input with shape [B, H, W, 3] and
-        outputs sigmoid probability [0.0, 1.0], and also
-        accepts boolean arguments `training=True` for enabling
-        dropout at test time.
-      num_samples: `int`, number of Monte Carlo samples
-        (i.e. forward passes from dropout) used for
-        the calculation of predictive mean and uncertainty.
-      type: (optional) `str`, type of uncertainty returns,
-        one of {"entropy", "stddev"}.
+  Args:
+    x: `numpy.ndarray`, datapoints from input space,
+      with shape [B, H, W, 3], where B the batch size and
+      H, W the input images height and width accordingly.
+    model: `tensorflow.keras.Model`, a probabilistic model,
+      which accepts input with shape [B, H, W, 3] and
+      outputs sigmoid probability [0.0, 1.0], and also
+      accepts boolean arguments `training=True` for enabling
+      dropout at test time.
+    type: (optional) `str`, type of uncertainty returns,
+      one of {"entropy"}.
 
-    Returns:
-      mean: `numpy.ndarray`, predictive mean, with shape [B].
-      uncertainty: `numpy.ndarray`, uncertainty in prediction,
-        with shape [B].
-    """
-    import scipy.stats
+  Returns:
+    mean: `numpy.ndarray`, predictive mean, with shape [B].
+    uncertainty: `numpy.ndarray`, uncertainty in prediction,
+      with shape [B].
+  """
+  from scipy.stats import dirichlet
+  #
+  # Get shapes of data
+  B, _, _, _ = x.shape
+  #
+  # Forward pass through the model
+  alpha, p_pos = model(x)
+  #
+  # Calculate the expected entropy of a draw from the Dirichlet
+  # parameterised by alpha
+  exp_H = dirichlet_expected_entropy(alpha)
+  #
+  # Use predictive entropy for uncertainty
+  if type == "entropy":
+    uncertainty = exp_H
+  else:
+    raise ValueError("Unrecognized type={} provided, use one of {'entropy'}".  format(type))
+  #
+  return p_pos, uncertainty
 
-    # Get shapes of data
-    B, _, _, _ = x.shape
 
-    # Monte Carlo samples from different dropout mask at test time
-    mc_samples = np.asarray([model(x, training=True)
-                             for _ in range(num_samples)]).reshape(-1, B)
+def categorical_entropy(p):
+  """The entropy of a categorical distribution."""
+  from scipy.special import xlogy
+  return - xlogy(p, p).sum(axis=-1)
 
-    # Bernoulli output distribution
-    dist = scipy.stats.bernoulli(mc_samples.mean(axis=0))
 
-    # Predictive mean calculation
-    mean = dist.mean()
+def dirichlet_expected_entropy(alpha):
+  """The expected entropy of a categorical distribution drawn from Dirichlet(alpha).
+  See https://math.stackexchange.com/a/3195376/203036"""
+  from scipy.special import digamma
+  A = alpha.sum(axis=-1)
+  # print(alpha.shape)
+  # print(A.shape)
+  return digamma(A + 1) - (alpha / np.expand_dims(A, axis=-1) * digamma(alpha + 1)).sum(axis=-1)
 
-    # Use predictive entropy for uncertainty
-    if type == "entropy":
-        uncertainty = dist.entropy()
-    # Use predictive standard deviation for uncertainty
-    elif type == "stddev":
-        uncertainty = dist.std()
-    else:
-        raise ValueError(
-            "Unrecognized type={} provided, use one of {'entropy', 'stddev'}".
-            format(type))
 
-    return mean, uncertainty
+def test_dirichlet_expected_entropy():
+  """Double check that our calculation of the expected entropy is close to sampled entropies.
+  """
+  import scipy.stats as st
+  N = 9  # Number of distinct p
+  M = 10000  # Number of samples
+  alpha = st.gamma.rvs(1, size=3 * N).reshape((N, -1))
+  exp_H = dirichlet_expected_entropy(alpha)
+  p = np.array([st.dirichlet.rvs(a, size=M) for a in alpha])
+  p.shape
+  H = categorical_entropy(p)
+  sample_H = H.mean(axis=-1)
+  # print(exp_H)
+  # print(sample_H)
+  assert(np.isclose(exp_H, sample_H, rtol=0.01, atol=0.01).all())
 
 
 def VGG_model(dropout_rate,
