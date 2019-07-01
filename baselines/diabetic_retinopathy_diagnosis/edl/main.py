@@ -142,8 +142,7 @@ def main(argv):
   classifier = model.EDL_model(logits,
                                input_shape,
                                learning_rate=FLAGS.learning_rate,
-                               epoch=epoch_counter,
-                               additional_metrics=[epoch_metric])
+                               epoch=epoch_counter)
   classifier.summary()
 
   @tf.function
