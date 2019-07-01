@@ -123,13 +123,6 @@ def main(argv):
   )
   ds_train, ds_validation, ds_test = dtask.datasets
   assert isinstance(ds_train, tf.data.Dataset)
-  ds_train
-
-  # for value in ds_train.take(2):
-  #   print(value[0].shape)
-  #   print(value[0].dtype)
-  #   print(value[1].shape)
-  #   print(value[1].dtype)
 
   ##########################
   # Hyperparmeters & Model #
