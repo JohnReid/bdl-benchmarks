@@ -55,7 +55,7 @@ if gpus:
 FLAGS = flags.FLAGS
 flags.DEFINE_string(
     name="output_dir",
-    default="/tmp",
+    default=os.path.join('/tmp', 'BDLB'),
     help="Path to store model, tensorboard and report outputs.",
 )
 flags.DEFINE_enum(
@@ -113,6 +113,11 @@ def main(argv):
   print(argv)
   print(FLAGS)
 
+  current_time = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
+  out_dir = os.path.join(FLAGS.output_dir, 'MCdropout', current_time)
+  file_writer = tf.summary.create_file_writer(os.path.join(os.path.join(out_dir, 'summary')))
+  file_writer.set_as_default()
+
   ##########################
   # Hyperparmeters & Model #
   ##########################
@@ -125,6 +130,7 @@ def main(argv):
                  input_shape=input_shape)
   classifier = VGGDrop(**hparams)
   classifier.summary()
+  print('********** Output dir: {} ************'.format(out_dir))
 
   #############
   # Load Task #
@@ -141,7 +147,6 @@ def main(argv):
   # Training Loop #
   #################
   current_time = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
-  log_dir = os.path.join(FLAGS.output_dir, 'BDLB', 'MCdropout', 'tensorboard', current_time)
   history = classifier.fit(
       ds_train,
       epochs=FLAGS.num_epochs,
@@ -149,24 +154,19 @@ def main(argv):
       class_weight=dtask.class_weight(),
       callbacks=[
           tfk.callbacks.TensorBoard(
-              log_dir=log_dir,
+              log_dir=os.path.join(out_dir, 'fit'),
               update_freq="epoch",
               write_graph=True,
               histogram_freq=1,
           ),
           tfk.callbacks.ModelCheckpoint(
-              filepath=os.path.join(
-                  FLAGS.output_dir,
-                  "checkpoints",
-                  "weights-{epoch}.ckpt",
-              ),
+              filepath=os.path.join(out_dir, "checkpoints", "weights-{epoch}.ckpt"),
               verbose=1,
               save_weights_only=True,
           )
       ],
   )
-  plotting.tfk_history(history,
-                       output_dir=os.path.join(FLAGS.output_dir, "history"))
+  plotting.tfk_history(history, output_dir=os.path.join(out_dir, "history"))
 
   ##############
   # Evaluation #
@@ -176,7 +176,7 @@ def main(argv):
                                    num_samples=FLAGS.num_mc_samples,
                                    type=FLAGS.uncertainty),
                  dataset=ds_test,
-                 output_dir=FLAGS.output_dir)
+                 output_dir=os.path.join(out_dir, 'evaluation'))
 
 
 if __name__ == "__main__":
