@@ -21,6 +21,7 @@ from __future__ import print_function
 
 import os
 import functools
+import datetime
 
 import bdlb
 from bdlb.core import plotting
@@ -139,6 +140,8 @@ def main(argv):
   #################
   # Training Loop #
   #################
+  current_time = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
+  log_dir = os.path.join(FLAGS.output_dir, 'BDLB', 'MCdropout', 'tensorboard', current_time)
   history = classifier.fit(
       ds_train,
       epochs=FLAGS.num_epochs,
@@ -146,7 +149,7 @@ def main(argv):
       class_weight=dtask.class_weight(),
       callbacks=[
           tfk.callbacks.TensorBoard(
-              log_dir=os.path.join(FLAGS.output_dir, "tensorboard"),
+              log_dir=log_dir,
               update_freq="epoch",
               write_graph=True,
               histogram_freq=1,
