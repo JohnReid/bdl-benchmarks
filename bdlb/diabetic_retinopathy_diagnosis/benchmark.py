@@ -19,6 +19,7 @@ from __future__ import division
 from __future__ import print_function
 
 import os
+import json
 
 from absl import logging
 
@@ -107,7 +108,8 @@ class DiabeticRetinopathyDiagnosisBenchmark(Benchmark):
     # Metrics for evaluation
     metrics = zip(["accuracy", "auc"], cls.metrics())
 
-    return {
+    # evaluate
+    evaluation = {
         metric: cls._evaluate_metric(
             y_true,
             y_pred,
@@ -117,6 +119,12 @@ class DiabeticRetinopathyDiagnosisBenchmark(Benchmark):
             name,
         ) for (metric, metric_fn) in metrics
     }
+
+    # save JSON of evaluation
+    if output_dir is not None:
+      json.dump(evaluation, open(os.path.join(output_dir, 'evaluation.json'), 'w'))
+
+    return evaluation
 
   @staticmethod
   def _evaluate_metric(y_true,
