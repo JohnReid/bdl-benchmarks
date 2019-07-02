@@ -162,8 +162,7 @@ def EDL_model(logits_model,
   # Alpha is the parameter for the Dirichlet, alpha0 is the sum
   alpha = tf.add(evidence, 1, name='alpha')
   alpha0 = tf.reduce_sum(alpha, axis=1, keepdims=True, name='alpha_zero')
-  dirichlet = tfd.Dirichlet(alpha)
-  entropy = dirichlet.entropy()
+  entropy = tf_dirichlet_expected_entropy(alpha)
 
   def entropy_mean(y_true, y_pred):
     return tf.reduce_mean(entropy, name='entropy_mean')
@@ -259,6 +258,14 @@ def dirichlet_expected_entropy(alpha):
   # print(alpha.shape)
   # print(A.shape)
   return digamma(A + 1) - (alpha / np.expand_dims(A, axis=-1) * digamma(alpha + 1)).sum(axis=-1)
+
+
+def tf_dirichlet_expected_entropy(alpha):
+  """The expected entropy of a categorical distribution drawn from Dirichlet(alpha).
+  See https://math.stackexchange.com/a/3195376/203036"""
+  from tensorflow.math import digamma
+  A = tf.reduce_sum(alpha, axis=-1, keepdims=True, name='A')
+  return digamma(A + 1) - tf.reduce_sum(alpha / A * digamma(alpha + 1), axis=-1)
 
 
 def test_dirichlet_expected_entropy():
