@@ -71,7 +71,7 @@ flags.DEFINE_integer(
 )
 flags.DEFINE_integer(
     name="num_epochs",
-    default=2,
+    default=50,
     help="Number of epochs of training over the whole training set.",
 )
 flags.DEFINE_enum(
@@ -113,8 +113,6 @@ def main(argv):
   #
   current_time = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
   out_dir = os.path.join(FLAGS.output_dir, 'EDL', current_time)
-  file_writer = tf.summary.create_file_writer(os.path.join(os.path.join(out_dir, 'summary')))
-  file_writer.set_as_default()
 
   def epoch_metric(y_true, y_pred):
     return epoch_counter.value()
@@ -141,6 +139,8 @@ def main(argv):
   ##########################
   input_shape = dict(medium=(256, 256, 3), realworld=(512, 512, 3))[FLAGS.level]
   epoch_counter = tf.Variable(initial_value=0, name="epoch_counter", trainable=False, dtype=tf.int64)
+  # summary_writer = tf.summary.create_file_writer(os.path.join(os.path.join(out_dir, 'summary')))
+  # summary_writer.set_as_default()
   tf.summary.experimental.set_step(epoch_counter)
   # tf.summary.scalar('epoch_counter', epoch_counter)
   logits = model.VGG_model(dropout_rate=FLAGS.dropout_rate,
@@ -183,14 +183,11 @@ def main(argv):
   ##############
   # Evaluation #
   ##############
-  evaluation = dtask.evaluate(functools.partial(model.predict,
-                                                model=classifier,
-                                                type=FLAGS.uncertainty),
-                              dataset=ds_test,
-                              output_dir=os.path.join(out_dir, 'evaluation'))
-  for metric, evals in evaluation.items():
-    print(metric)
-    print(evals)
+  dtask.evaluate(functools.partial(model.predict,
+                                   model=classifier,
+                                   type=FLAGS.uncertainty),
+                 dataset=ds_test,
+                 output_dir=os.path.join(out_dir, 'evaluation'))
 
 
 if __name__ == "__main__":
