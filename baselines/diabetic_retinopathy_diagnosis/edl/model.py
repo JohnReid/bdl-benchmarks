@@ -264,8 +264,10 @@ def tf_dirichlet_expected_entropy(alpha):
   """The expected entropy of a categorical distribution drawn from Dirichlet(alpha).
   See https://math.stackexchange.com/a/3195376/203036"""
   from tensorflow.math import digamma
-  A = tf.reduce_sum(alpha, axis=-1, keepdims=True, name='A')
-  return digamma(A + 1) - tf.reduce_sum(alpha / A * digamma(alpha + 1), axis=-1)
+  A = tf.reduce_sum(alpha, axis=-1, name='A')
+  return tf.subtract(digamma(A + 1),
+                     tf.reduce_sum(alpha / tf.expand_dims(A, axis=-1) * digamma(alpha + 1), axis=-1),
+                     name='exp_entropy')
 
 
 def test_dirichlet_expected_entropy():
