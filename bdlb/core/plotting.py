@@ -46,7 +46,6 @@ def tfk_history(history, output_dir=None, **ax_set_kwargs):
                   trasparent=True,
                   dpi=300,
                   format="pdf")
-    fig.show()
 
 
 def leaderboard(benchmark,
@@ -136,4 +135,3 @@ def leaderboard(benchmark,
                   trasparent=True,
                   dpi=300,
                   format="pdf")
-    fig.show()
