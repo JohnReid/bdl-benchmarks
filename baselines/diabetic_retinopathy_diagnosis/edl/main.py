@@ -71,7 +71,7 @@ flags.DEFINE_integer(
 )
 flags.DEFINE_integer(
     name="num_epochs",
-    default=50,
+    default=2,
     help="Number of epochs of training over the whole training set.",
 )
 flags.DEFINE_enum(
@@ -188,7 +188,9 @@ def main(argv):
                                                 type=FLAGS.uncertainty),
                               dataset=ds_test,
                               output_dir=os.path.join(out_dir, 'evaluation'))
-  print(evaluation)
+  for metric, evals in evaluation.items():
+    print(metric)
+    print(evals)
 
 
 if __name__ == "__main__":
