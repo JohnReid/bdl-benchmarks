@@ -126,6 +126,11 @@ class DiabeticRetinopathyDiagnosisBenchmark(Benchmark):
       os.makedirs(output_dir, exist_ok=True)
       json.dump(json_evals, open(os.path.join(output_dir, 'evaluation.json'), 'w'))
 
+    # print evaluation
+    for metric, evals in evaluation.items():
+      print(metric)
+      print(evals)
+
     return evaluation
 
   @staticmethod
