@@ -122,6 +122,7 @@ class DiabeticRetinopathyDiagnosisBenchmark(Benchmark):
 
     # save JSON of evaluation
     if output_dir is not None:
+      os.makedirs(output_dir, exist_ok=True)
       json.dump(evaluation, open(os.path.join(output_dir, 'evaluation.json'), 'w'))
 
     return evaluation
