@@ -229,11 +229,8 @@ def predict(x, model, type="entropy"):
       with shape [B].
   """
   #
-  # Get shapes of data
-  B, _, _, _ = x.shape
-  #
   # Forward pass through the model
-  alpha, p_pos = model(x)
+  alpha, p_pos = model.predict(x)
   #
   # Calculate the expected entropy of a draw from the Dirichlet
   # parameterised by alpha
