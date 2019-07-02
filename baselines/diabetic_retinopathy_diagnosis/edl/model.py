@@ -80,23 +80,23 @@ def loss_regulariser(alpha, other=None):
   if other is None:
     other = tfd.Dirichlet(tf.ones(alpha.shape[-1]))
   regulariser = tfd.Dirichlet(alpha).kl_divergence(other, name='regulariser')
-  tf.summary.histogram('regulariser', data=regulariser)
+  # tf.summary.histogram('regulariser', data=regulariser)
   return regulariser
 
 
 def annealing_coefficient(epoch):
   """The annealing coefficient grows as the number of epochs to a maximum of 1.
   """
-  coef = tf.minimum(1.0, tf.cast(epoch / 10, tf.float32))
-  tf.summary.scalar('annealing coefficient', data=coef, step=epoch)
+  coef = tf.minimum(1.0, tf.cast(epoch, tf.float32) / 10)
+  # tf.summary.scalar('annealing coefficient', data=coef, step=epoch)
   return coef
 
 
 def mse_regularised_loss(y, alpha, lambda_t, sample_weight=None):
   regularisation_term = lambda_t * loss_regulariser(alpha)
   mse_term = mse_loss(y, alpha)
-  tf.summary.histogram('regularisation term', data=regularisation_term)
-  tf.summary.histogram('mse term', data=mse_term)
+  # tf.summary.histogram('regularisation term', data=regularisation_term)
+  # tf.summary.histogram('mse term', data=mse_term)
   # print('y: ', y)
   # print('Regularisation: ', regularisation_term)
   # print('MSE term: ', mse_term)
@@ -162,10 +162,18 @@ def EDL_model(logits_model,
   # Alpha is the parameter for the Dirichlet, alpha0 is the sum
   alpha = tf.add(evidence, 1, name='alpha')
   alpha0 = tf.reduce_sum(alpha, axis=1, keepdims=True, name='alpha_zero')
-  entropy = tf_dirichlet_expected_entropy(alpha)
+  exp_entropy = tf_dirichlet_expected_entropy(alpha)
+  print('E(H): ', exp_entropy)
+  _entropy_mean = tf.reduce_mean(exp_entropy, name='entropy_mean')
+  # tf.summary.histogram('exp_entropy', data=exp_entropy)
+  # print('E(H): ', exp_entropy)
+  # test_writer = tf.summary.create_file_writer('/tmp/BDLB/EDL/test')
+  # with test_writer.as_default():
+  #   tf.summary.scalar('exp_entropy', data=_entropy_mean)
+  #   # tf.summary.histogram('exp_entropy', data=exp_entropy)
 
   def entropy_mean(y_true, y_pred):
-    return tf.reduce_mean(entropy, name='entropy_mean')
+    return _entropy_mean
 
   #
   # Calculate the mean probabilities
