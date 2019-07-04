@@ -38,17 +38,17 @@ def exp_evidence(logits, clip_value=10.0):
   return tf.exp(tf.clip_by_value(logits, -clip_value, clip_value), name='exp_evidence')
 
 
-def KL(alpha, K):
+def KL(alpha):
   """Calculate the Kullback-Leibler divergence of a Dirichlet(alpha)
   distribution with a Dirichlet(1, ..., 1) distribution.
   """
-  beta = tf.constant(np.ones((1, K)), dtype=tf.float32)
+  beta = tf.ones_like(alpha)
   S_alpha = tf.reduce_sum(alpha, axis=1, keepdims=True)
   S_beta = tf.reduce_sum(beta, axis=1, keepdims=True)
-  lnB = tf.lgamma(S_alpha) - tf.reduce_sum(tf.lgamma(alpha),
-                                           axis=1, keepdims=True)
-  lnB_uni = tf.reduce_sum(tf.lgamma(beta), axis=1,
-                          keepdims=True) - tf.lgamma(S_beta)
+  lnB = tf.math.lgamma(S_alpha) - tf.reduce_sum(tf.math.lgamma(alpha),
+                                                axis=1, keepdims=True)
+  lnB_uni = tf.reduce_sum(tf.math.lgamma(beta), axis=1,
+                          keepdims=True) - tf.math.lgamma(S_beta)
   dg0 = tf.math.digamma(S_alpha)
   dg1 = tf.math.digamma(alpha)
 
@@ -77,10 +77,10 @@ def mse_loss(y, alpha):
 def loss_regulariser(alpha, other=None):
   """Loss regularisation term (without lambda_t)
   """
-  if other is None:
-    other = tfd.Dirichlet(tf.ones(alpha.shape[-1]))
-  regulariser = tfd.Dirichlet(alpha).kl_divergence(other, name='regulariser')
-  # tf.summary.histogram('regulariser', data=regulariser)
+  # if other is None:
+  #   other = tfd.Dirichlet(tf.ones(alpha.shape[-1]))
+  # regulariser = tfd.Dirichlet(alpha).kl_divergence(other, name='regulariser')
+  regulariser = KL(alpha)
   return regulariser
 
 
@@ -88,7 +88,6 @@ def annealing_coefficient(epoch):
   """The annealing coefficient grows as the number of epochs to a maximum of 1.
   """
   coef = tf.minimum(1.0, tf.cast(epoch, tf.float32) / 10)
-  # tf.summary.scalar('annealing coefficient', data=coef, step=epoch)
   return coef
 
 
@@ -127,7 +126,7 @@ def make_loss(losstype, epoch, EDL_func=tf.math.digamma):
   from functools import partial
   if "mse" == losstype:
     loss = partial(mse_regularised_loss, lambda_t=annealing_coefficient(epoch))
-  elif "mse" == losstype:
+  elif "edl" == losstype:
     loss = partial(EDL_loss(EDL_func), epoch=epoch)
   else:
     raise ValueError('Unknown loss: {}'.format(losstype))
@@ -144,9 +143,6 @@ def EDL_model(logits, logits_to_evidence=exp_evidence):
   # Alpha is the parameter for the Dirichlet, alpha0 is the sum
   alpha = tf.add(evidence, 1, name='alpha')
   alpha0 = tf.reduce_sum(alpha, axis=1, keepdims=True, name='alpha_zero')
-  exp_entropy = tf_dirichlet_expected_entropy(alpha)
-  # print('E(H): ', exp_entropy.shape)
-  _entropy_mean = tf.reduce_mean(exp_entropy, name='entropy_mean')
   # tf.summary.histogram('exp_entropy', data=exp_entropy)
   # print('E(H): ', exp_entropy)
   # test_writer = tf.summary.create_file_writer('/tmp/BDLB/EDL/test')
@@ -154,17 +150,14 @@ def EDL_model(logits, logits_to_evidence=exp_evidence):
   #   tf.summary.scalar('exp_entropy', data=_entropy_mean)
   #   # tf.summary.histogram('exp_entropy', data=exp_entropy)
 
-  def entropy_mean(y_true, y_pred):
-    return _entropy_mean
-
   #
   # Calculate the mean probabilities
-  p = tf.divide(alpha, alpha0, name='p')
+  p_mean = tf.divide(alpha, alpha0, name='p_mean')
 
   #
   # The output is the probability of a positive classification
-  # outputs = p[:, 1]  # This didn't work
-  p_pos = tf.slice(p, [0, 1], [-1, -1], name='p_pos')
+  # outputs = p_mean[:, 1]  # This didn't work
+  p_pos = tf.slice(p_mean, [0, 1], [-1, -1], name='p_pos')
 
   #
   # Compile the model
@@ -177,7 +170,7 @@ def EDL_model(logits, logits_to_evidence=exp_evidence):
   # model.compile(loss=[None, custom_loss],
   #               optimizer=tfk.optimizers.Adam(learning_rate),
   #               metrics=[[], metrics])
-  return evidence, alpha, alpha0, p_pos
+  return evidence, alpha, alpha0, p_mean, p_pos
 
 
 def predict(x, model, type="entropy"):

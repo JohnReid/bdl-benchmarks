@@ -162,6 +162,12 @@ def main(argv):
   train_accuracy = tfk.metrics.Accuracy()
   test_accuracy = tfk.metrics.Accuracy()
   #
+  # Set up checkpointing
+  checkpoint_dir = os.path.join(out_dir, 'checkpoints')
+  checkpoint_prefix = os.path.join(checkpoint_dir, "ckpt")
+  root = tf.train.Checkpoint(optimizer=optimizer, model=logits_model, optimizer_step=global_step)
+
+  #
   for epoch in range(FLAGS.num_epochs):
     #
     # Reset statistics
@@ -178,7 +184,7 @@ def main(argv):
     # tf.summary.scalar('global_step', global_step)
     #
     # Training loop: for each batch
-    for x, y in ds_train:
+    for batch, (x, y) in enumerate(ds_train.take(10)):
       # print('x: ', x.shape)
       # print('y: ', y.shape)
       y_one_hot = tf.one_hot(y, depth=2, name="y_one_hot")  # Make one-hot for MSE loss
@@ -189,12 +195,14 @@ def main(argv):
         #
         # Calculate the logits and the evidence
         logits = logits_model(x)
-        evidence, alpha, alpha0, p_pos = model.EDL_model(logits)
+        evidence, alpha, alpha0, p_mean, p_pos = model.EDL_model(logits)
         #
         # Calculate the loss
-        regularisation_term = lambda_t * model.loss_regulariser(alpha)
+        alpha_mod = (1 - y_one_hot) * evidence + 1
+        regularisation_term = lambda_t * model.loss_regulariser(alpha_mod)
         mse_term = model.mse_loss(y_one_hot, alpha)
         loss = mse_term + regularisation_term
+        # loss = mse_term
         # print('Loss: ', loss.shape)
         #
         # Calculate gradients
@@ -210,6 +218,7 @@ def main(argv):
       prediction = tf.argmax(logits, axis=1, output_type=y.dtype)
       #
       # Make summaries
+      tf.summary.histogram('alpha', alpha)
       tf.summary.histogram('expected_entropy', exp_entropy)
       tf.summary.histogram('regularisation', regularisation_term)
       tf.summary.histogram('mse', mse_term)
@@ -221,12 +230,12 @@ def main(argv):
       train_loss_avg.update_state(loss)  # add current batch loss
     #
     # Evaluate on test accuracy
-    for (x, y) in ds_test:
-      logits = logits_model(x)
-      prediction = tf.argmax(logits, axis=1, output_type=y.dtype)
-      # print('y: ', y.shape)
-      # print('prediction: ', prediction.shape)
-      test_accuracy.update_state(prediction, y)
+    # for test_batch, (x, y) in enumerate(ds_test):
+    #   logits = logits_model(x)
+    #   prediction = tf.argmax(logits, axis=1, output_type=y.dtype)
+    #   # print('y: ', y.shape)
+    #   # print('prediction: ', prediction.shape)
+    #   test_accuracy.update_state(prediction, y)
     #
     # Log statistics
     if epoch % 1 == 0:
@@ -238,6 +247,11 @@ def main(argv):
                             train_accuracy.result(),
                             test_accuracy.result()))
     #
+    # Make a checkpoint
+    if epoch % 1 == 0:
+      root.save(checkpoint_prefix)
+    # root.restore(tf.train.latest_checkpoint(checkpoint_dir))
+    #
     # end epoch
     tf.summary.scalar('train_loss_avg', train_loss_avg.result())
     tf.summary.scalar('train_entropy_avg', train_entropy_avg.result())
@@ -248,6 +262,9 @@ def main(argv):
     train_accuracy_results.append(train_accuracy.result())
     test_accuracy_results.append(test_accuracy.result())
     global_step.assign_add(1)
+  #
+  # Make a final checkpoint
+  root.save(checkpoint_prefix)
 
   # history = classifier.fit(
   #     ds_train,
