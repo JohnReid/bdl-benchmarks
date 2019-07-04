@@ -20,11 +20,12 @@ from __future__ import division
 from __future__ import print_function
 
 import os
-import functools
 import datetime
+import matplotlib.pyplot as plt
 
 import bdlb
-from bdlb.core import plotting
+# from bdlb.diabetic_retinopathy_diagnosis.benchmark import DiabeticRetinopathyDiagnosisBenchmark
+# from bdlb.core import plotting
 import baselines.diabetic_retinopathy_diagnosis.edl.model as model
 
 from absl import app
@@ -33,6 +34,8 @@ import tensorflow as tf
 tfk = tf.keras
 tfkb = tfk.backend
 
+print("TensorFlow version: {}".format(tf.__version__))
+print("Eager execution: {}".format(tf.executing_eagerly()))
 
 #
 # Following advice here to limit memory growth on TF 2.0
@@ -113,14 +116,8 @@ def main(argv):
   #
   current_time = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
   out_dir = os.path.join(FLAGS.output_dir, 'EDL', current_time)
-
-  def epoch_metric(y_true, y_pred):
-    return epoch_counter.value()
-
-  @tf.function
-  def increment_epoch():
-    "Increment the epoch counter variable."
-    epoch_counter.assign_add(1)
+  file_writer = tf.summary.create_file_writer(os.path.join(out_dir, "tensorboard"))
+  file_writer.set_as_default()
 
   #############
   # Load Task #
@@ -138,56 +135,165 @@ def main(argv):
   # Hyperparmeters & Model #
   ##########################
   input_shape = dict(medium=(256, 256, 3), realworld=(512, 512, 3))[FLAGS.level]
-  epoch_counter = tf.Variable(initial_value=0, name="epoch_counter", trainable=False, dtype=tf.int64)
-  # summary_writer = tf.summary.create_file_writer(os.path.join(os.path.join(out_dir, 'summary')))
-  # summary_writer.set_as_default()
-  tf.summary.experimental.set_step(epoch_counter)
-  # tf.summary.scalar('epoch_counter', epoch_counter)
-  logits = model.VGG_model(dropout_rate=FLAGS.dropout_rate,
-                           num_base_filters=FLAGS.num_base_filters,
-                           l2_reg=FLAGS.l2_reg,
-                           input_shape=input_shape,
-                           output_dim=2)
-  classifier = model.EDL_model(logits,
-                               input_shape,
-                               learning_rate=FLAGS.learning_rate,
-                               epoch=epoch_counter)
-  classifier.summary()
+  global_step = tf.Variable(initial_value=0, name="global_step", trainable=False, dtype=tf.int64)
+  tf.summary.experimental.set_step(global_step)
+  logits_model = model.VGG_model(dropout_rate=FLAGS.dropout_rate,
+                                 num_base_filters=FLAGS.num_base_filters,
+                                 l2_reg=FLAGS.l2_reg,
+                                 input_shape=input_shape,
+                                 output_dim=2)
   print('********** Output dir: {} ************'.format(out_dir))
+
+  # Create optimiser
+  optimizer = tfk.optimizers.Adam(FLAGS.learning_rate)
 
   #################
   # Training Loop #
   #################
-  history = classifier.fit(
-      ds_train,
-      epochs=FLAGS.num_epochs,
-      validation_data=ds_validation,
-      class_weight=dtask.class_weight(),
-      callbacks=[
-          tfk.callbacks.LambdaCallback(on_epoch_end=lambda epoch, logs: increment_epoch()),
-          tfk.callbacks.TensorBoard(
-              log_dir=os.path.join(out_dir, 'fit'),
-              update_freq="epoch",
-              write_graph=True,
-              histogram_freq=1,
-          ),
-          tfk.callbacks.ModelCheckpoint(
-              filepath=os.path.join(out_dir, "checkpoints", "weights-{epoch}.ckpt"),
-              verbose=1,
-              save_weights_only=True,
-          )
-      ],
-  )
-  plotting.tfk_history(history, output_dir=os.path.join(out_dir, "history"))
+  #
+  # keep results for plotting
+  train_loss_results = []
+  train_accuracy_results = []
+  test_accuracy_results = []
+  #
+  # Keep track of statistics
+  train_loss_avg = tfk.metrics.Mean()
+  train_entropy_avg = tfk.metrics.Mean()
+  train_accuracy = tfk.metrics.Accuracy()
+  test_accuracy = tfk.metrics.Accuracy()
+  #
+  for epoch in range(FLAGS.num_epochs):
+    #
+    # Reset statistics
+    train_loss_avg.reset_states()
+    train_entropy_avg.reset_states()
+    train_accuracy.reset_states()
+    test_accuracy.reset_states()
+    #
+    # Calculate annealing coefficient
+    lambda_t = model.annealing_coefficient(epoch)
+    #
+    # Make summaries
+    tf.summary.scalar('lambda_t', lambda_t)
+    # tf.summary.scalar('global_step', global_step)
+    #
+    # Training loop: for each batch
+    for x, y in ds_train:
+      # print('x: ', x.shape)
+      # print('y: ', y.shape)
+      y_one_hot = tf.one_hot(y, depth=2, name="y_one_hot")  # Make one-hot for MSE loss
+      # print('y one hot: ', y_one_hot.shape)
+      #
+      # Calculate the loss
+      with tf.GradientTape() as tape:
+        #
+        # Calculate the logits and the evidence
+        logits = logits_model(x)
+        evidence, alpha, alpha0, p_pos = model.EDL_model(logits)
+        #
+        # Calculate the loss
+        regularisation_term = lambda_t * model.loss_regulariser(alpha)
+        mse_term = model.mse_loss(y_one_hot, alpha)
+        loss = mse_term + regularisation_term
+        # print('Loss: ', loss.shape)
+        #
+        # Calculate gradients
+        grads = tape.gradient(loss, logits_model.trainable_variables)
+      #
+      # Apply gradients
+      optimizer.apply_gradients(zip(grads, logits_model.trainable_variables))
+      #
+      # Calculate the expected entropy
+      exp_entropy = model.tf_dirichlet_expected_entropy(alpha)
+      #
+      # compare predicted label to actual label
+      prediction = tf.argmax(logits, axis=1, output_type=y.dtype)
+      #
+      # Make summaries
+      tf.summary.histogram('expected_entropy', exp_entropy)
+      tf.summary.histogram('regularisation', regularisation_term)
+      tf.summary.histogram('mse', mse_term)
+      tf.summary.histogram('loss', loss)
+      #
+      # Track progress
+      train_accuracy.update_state(prediction, y)
+      train_entropy_avg.update_state(exp_entropy)
+      train_loss_avg.update_state(loss)  # add current batch loss
+    #
+    # Evaluate on test accuracy
+    for (x, y) in ds_test:
+      logits = logits_model(x)
+      prediction = tf.argmax(logits, axis=1, output_type=y.dtype)
+      # print('y: ', y.shape)
+      # print('prediction: ', prediction.shape)
+      test_accuracy.update_state(prediction, y)
+    #
+    # Log statistics
+    if epoch % 1 == 0:
+      template = "Epoch {:03d}: Train loss: {:.3f}, Train entropy: {:.3f}, " \
+          "Train accuracy: {:.3%}, Test accuracy: {:.3%}"
+      print(template.format(epoch,
+                            train_loss_avg.result(),
+                            train_entropy_avg.result(),
+                            train_accuracy.result(),
+                            test_accuracy.result()))
+    #
+    # end epoch
+    tf.summary.scalar('train_loss_avg', train_loss_avg.result())
+    tf.summary.scalar('train_entropy_avg', train_entropy_avg.result())
+    tf.summary.scalar('train_accuracy', train_accuracy.result())
+    tf.summary.scalar('test_accuracy', test_accuracy.result())
+    train_loss_results.append(train_loss_avg.result())
+    train_loss_results.append(train_entropy_avg.result())
+    train_accuracy_results.append(train_accuracy.result())
+    test_accuracy_results.append(test_accuracy.result())
+    global_step.assign_add(1)
+
+  # history = classifier.fit(
+  #     ds_train,
+  #     epochs=FLAGS.num_epochs,
+  #     validation_data=ds_validation,
+  #     class_weight=dtask.class_weight(),
+  #     callbacks=[
+  #         tfk.callbacks.LambdaCallback(on_epoch_end=lambda epoch, logs: increment_epoch()),
+  #         tfk.callbacks.TensorBoard(
+  #             log_dir=os.path.join(out_dir, 'fit'),
+  #             update_freq="epoch",
+  #             write_graph=True,
+  #             histogram_freq=1,
+  #         ),
+  #         tfk.callbacks.ModelCheckpoint(
+  #             filepath=os.path.join(out_dir, "checkpoints", "weights-{epoch}.ckpt"),
+  #             verbose=1,
+  #             save_weights_only=True,
+  #         )
+  #     ],
+  # )
+  # plotting.tfk_history(history, output_dir=os.path.join(out_dir, "history"))
+
+  #
+  # Plot history
+  fig, axes = plt.subplots(2, sharex=True, figsize=(12, 8))
+  fig.suptitle('Training Metrics')
+  #
+  axes[0].set_ylabel("Loss", fontsize=14)
+  axes[0].plot(train_loss_results)
+  #
+  axes[1].set_ylabel("Accuracy", fontsize=14)
+  axes[1].set_xlabel("Epoch", fontsize=14)
+  axes[1].plot(train_accuracy_results, label='train')
+  axes[1].plot(test_accuracy_results, label='test')
+  axes[1].legend(loc='lower right')
+  plt.savefig('tmp.png')
 
   ##############
   # Evaluation #
   ##############
-  dtask.evaluate(functools.partial(model.predict,
-                                   model=classifier,
-                                   type=FLAGS.uncertainty),
-                 dataset=ds_test,
-                 output_dir=os.path.join(out_dir, 'evaluation'))
+  # dtask.evaluate(functools.partial(model.predict,
+  #                                  model=edl_model,
+  #                                  type=FLAGS.uncertainty),
+  #                dataset=ds_test,
+  #                output_dir=os.path.join(out_dir, 'evaluation'))
 
 
 if __name__ == "__main__":
