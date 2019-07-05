@@ -21,17 +21,19 @@ from __future__ import print_function
 
 import os
 import functools
-
-from absl import app
-from absl import flags
-from absl import logging
-import tensorflow as tf
-tfk = tf.keras
+import datetime
 
 import bdlb
 from model import VGGFlipout
 from model import predict
 from bdlb.core import plotting
+
+from absl import app
+from absl import flags
+import tensorflow as tf
+tfk = tf.keras
+
+bdlb.tf_limit_memory_growth()
 
 ##########################
 # Command line arguments #
@@ -97,6 +99,9 @@ def main(argv):
   print(argv)
   print(FLAGS)
 
+  current_time = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
+  out_dir = os.path.join(FLAGS.output_dir, 'MFVI', current_time)
+
   ##########################
   # Hyperparmeters & Model #
   ##########################
@@ -129,14 +134,14 @@ def main(argv):
       class_weight=dtask.class_weight(),
       callbacks=[
           tfk.callbacks.TensorBoard(
-              log_dir=os.path.join(FLAGS.output_dir, "tensorboard"),
+              log_dir=os.path.join(out_dir, "tensorboard"),
               update_freq="epoch",
               write_graph=True,
               histogram_freq=1,
           ),
           tfk.callbacks.ModelCheckpoint(
               filepath=os.path.join(
-                  FLAGS.output_dir,
+                  out_dir,
                   "checkpoints",
                   "weights-{epoch}.ckpt",
               ),
@@ -146,7 +151,7 @@ def main(argv):
       ],
   )
   plotting.tfk_history(history,
-                       output_dir=os.path.join(FLAGS.output_dir, "history"))
+                       output_dir=os.path.join(out_dir, "history"))
 
   ##############
   # Evaluation #
@@ -156,7 +161,7 @@ def main(argv):
                                    num_samples=FLAGS.num_mc_samples,
                                    type=FLAGS.uncertainty),
                  dataset=ds_test,
-                 output_dir=FLAGS.output_dir)
+                 output_dir=out_dir)
 
 
 if __name__ == "__main__":
