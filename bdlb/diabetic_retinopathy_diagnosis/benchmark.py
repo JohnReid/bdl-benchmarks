@@ -120,11 +120,16 @@ class DiabeticRetinopathyDiagnosisBenchmark(Benchmark):
         ) for (metric, metric_fn) in metrics
     }
 
-    # save JSON of evaluation
     if output_dir is not None:
+      #
+      # save JSON of evaluation
       json_evals = dict((key, val.to_dict(orient='record')) for key, val in evaluation.items())
       os.makedirs(output_dir, exist_ok=True)
       json.dump(json_evals, open(os.path.join(output_dir, 'evaluation.json'), 'w'))
+      #
+      # save CSVs of evaluation
+      for metric, evals in evaluation.items():
+        evals.to_csv(os.path.join(output_dir, 'eval-{}.csv'.format(metric)), index=False)
 
     # print evaluation
     for metric, evals in evaluation.items():
