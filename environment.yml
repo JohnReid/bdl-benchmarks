@@ -6,12 +6,15 @@ dependencies:
   - jupyter
   - jupyterlab
   - matplotlib
+  - seaborn
   - scipy
+  - pandas
   - kaggle
   - opencv
   - pip
   - pip:
     - tensorflow-gpu==2.0.0b1
     - tensorflow-datasets
+    - tfp-nightly
     - gdown
     - -e .
