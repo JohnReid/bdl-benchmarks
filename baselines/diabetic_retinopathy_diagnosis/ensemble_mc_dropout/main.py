@@ -45,7 +45,7 @@ flags.DEFINE_spaceseplist(
 )
 flags.DEFINE_string(
     name="output_dir",
-    default="/tmp",
+    default="output",
     help="Path to store model, tensorboard and report outputs.",
 )
 flags.DEFINE_enum(
@@ -142,7 +142,7 @@ def main(argv):
                                    num_samples=FLAGS.num_mc_samples,
                                    type=FLAGS.uncertainty),
                  dataset=ds_test,
-                 output_dir=out_dir)
+                 output_dir=os.path.join(out_dir, 'evaluation'))
 
 
 if __name__ == "__main__":

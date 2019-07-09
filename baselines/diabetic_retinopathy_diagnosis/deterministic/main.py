@@ -41,7 +41,7 @@ bdlb.tf_limit_memory_growth()
 FLAGS = flags.FLAGS
 flags.DEFINE_string(
     name="output_dir",
-    default="/tmp",
+    default="output",
     help="Path to store model, tensorboard and report outputs.",
 )
 flags.DEFINE_enum(
@@ -157,7 +157,7 @@ def main(argv):
                                    model=classifier,
                                    type=FLAGS.uncertainty),
                  dataset=ds_test,
-                 output_dir=out_dir)
+                 output_dir=os.path.join(out_dir, 'evaluation'))
 
 
 if __name__ == "__main__":

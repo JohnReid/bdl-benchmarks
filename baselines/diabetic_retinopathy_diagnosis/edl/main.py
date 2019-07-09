@@ -58,7 +58,7 @@ if gpus:
 FLAGS = flags.FLAGS
 flags.DEFINE_string(
     name="output_dir",
-    default=os.path.join('/tmp', 'BDLB'),
+    default='output',
     help="Path to store model, tensorboard and report outputs.",
 )
 flags.DEFINE_enum(
