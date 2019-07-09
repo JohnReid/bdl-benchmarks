@@ -80,8 +80,6 @@ class DiabeticRetinopathyDiagnosisBenchmark(Benchmark):
     import tqdm
     import numpy as np
     import tensorflow_datasets as tfds
-    import matplotlib.pyplot as plt
-    COLORS = plt.rcParams['axes.prop_cycle'].by_key()['color']
 
     # Containers used for caching performance evaluation
     y_true = list()
@@ -179,9 +177,9 @@ class DiabeticRetinopathyDiagnosisBenchmark(Benchmark):
 
     for i, frac in enumerate(fractions):
       # Keep only the %-frac of lowest uncertainties
-      I = np.zeros(N, dtype=bool)
-      I[I_uncertainties[:int(N * frac)]] = True
-      mean[i] = metric_fn(y_true[I], y_pred[I])
+      idxs = np.zeros(N, dtype=bool)
+      idxs[I_uncertainties[:int(N * frac)]] = True
+      mean[idxs] = metric_fn(y_true[idxs], y_pred[idxs])
 
     # Store
     df = pd.DataFrame(dict(retained_data=fractions, mean=mean, std=std))
@@ -452,7 +450,7 @@ class DiabeticRetinopathyDiagnosisBenchmark(Benchmark):
   def _ImageDataGenerator_config():
     """Returns the configs for the `tensorflow.keras.preprocessing.image.ImageDataGenerator`,
     used for the random augmentation of the dataset, following the implementation of
-    https://github.com/chleibig/disease-detection/blob/f3401b26aa9b832ff77afe93e3faa342f7d088e5/scripts/inspect_data_augmentation.py."""
+    https://github.com/chleibig/disease-detection/blob/f3401b26aa9b832ff77afe93e3faa342f7d088e5/scripts/inspect_data_augmentation.py."""  # noqa: E501
     augmentation_config = dict(
         featurewise_center=False,
         samplewise_center=False,
