@@ -66,7 +66,7 @@ class DiabeticRetinopathyDiagnosisBenchmark(Benchmark):
         self.download_and_prepare()
 
   @classmethod
-  def evaluate(cls, estimator, dataset, output_dir=None, name=None):
+  def evaluate(cls, estimator, dataset, output_dir=None, name=None, additional_metrics=None):
     """Evaluates an `estimator` on the `mode` benchmark dataset.
 
     Args:
@@ -75,6 +75,7 @@ class DiabeticRetinopathyDiagnosisBenchmark(Benchmark):
       dataset: `tf.data.Dataset`, on which dataset to performance evaluation.
       output_dir: (optional) `str`, directory to save figures.
       name: (optional) `str`, the name of the method.
+      additional_metrics: (optional) `list`, additional metrics as (name, metric_fn) tuples to evaluate.
     """
     import inspect
     import tqdm
@@ -104,7 +105,9 @@ class DiabeticRetinopathyDiagnosisBenchmark(Benchmark):
     fractions = np.asarray([0.5, 0.6, 0.7, 0.8, 0.9, 1.0])
 
     # Metrics for evaluation
-    metrics = zip(["accuracy", "auc"], cls.metrics())
+    metrics = list(zip(["accuracy", "auc"], cls.metrics()))
+    if additional_metrics is not None:
+      metrics = metrics + additional_metrics
 
     # evaluate
     evaluation = {
@@ -179,7 +182,7 @@ class DiabeticRetinopathyDiagnosisBenchmark(Benchmark):
       # Keep only the %-frac of lowest uncertainties
       idxs = np.zeros(N, dtype=bool)
       idxs[I_uncertainties[:int(N * frac)]] = True
-      mean[idxs] = metric_fn(y_true[idxs], y_pred[idxs])
+      mean[i] = metric_fn(y_true[idxs], y_pred[idxs])
 
     # Store
     df = pd.DataFrame(dict(retained_data=fractions, mean=mean, std=std))
