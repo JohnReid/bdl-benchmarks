@@ -23,7 +23,6 @@ import os
 import functools
 import datetime
 
-import sail.metrics
 import bdlb
 # from bdlb.core import plotting
 from baselines.diabetic_retinopathy_diagnosis.temperature_scaling import model
@@ -192,12 +191,17 @@ def main(argv):
   ##############
   # Evaluation #
   ##############
-  dtask.evaluate(functools.partial(model.predict,
-                                   model=ts_model,
-                                   type=FLAGS.uncertainty),
+  additional_metrics = []
+  try:
+    import sail.metrics
+    additional_metrics.append(('ECE', sail.metrics.TFExpectedCalibrationError()))
+  except ImportError:
+    import warnings
+    warnings.warn('Could not import SAIL metrics.')
+  dtask.evaluate(functools.partial(model.predict, model=ts_model, type=FLAGS.uncertainty),
                  dataset=ds_test,
                  output_dir=os.path.join(out_dir, 'evaluation'),
-                 additional_metrics=[('ECE', sail.metrics.TFExpectedCalibrationError())])
+                 additional_metrics=additional_metrics)
   print('Temperature: ', ts_layer.temperature.value)
 
   # Check beta distribution

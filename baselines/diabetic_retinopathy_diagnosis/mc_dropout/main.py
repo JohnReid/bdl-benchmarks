@@ -23,7 +23,6 @@ import os
 import functools
 import datetime
 
-import sail.metrics
 import bdlb
 from bdlb.core import plotting
 from baselines.diabetic_retinopathy_diagnosis.mc_dropout.model import VGGDrop
@@ -172,13 +171,20 @@ def main(argv):
   ##############
   # Evaluation #
   ##############
+  additional_metrics = []
+  try:
+    import sail.metrics
+    additional_metrics.append(('ECE', sail.metrics.TFExpectedCalibrationError()))
+  except ImportError:
+    import warnings
+    warnings.warn('Could not import SAIL metrics.')
   dtask.evaluate(functools.partial(predict,
                                    model=classifier,
                                    num_samples=FLAGS.num_mc_samples,
                                    type=FLAGS.uncertainty),
                  dataset=ds_test,
                  output_dir=os.path.join(out_dir, 'evaluation'),
-                 additional_metrics=[('ECE', sail.metrics.TFExpectedCalibrationError())])
+                 additional_metrics=additional_metrics)
 
 
 if __name__ == "__main__":
