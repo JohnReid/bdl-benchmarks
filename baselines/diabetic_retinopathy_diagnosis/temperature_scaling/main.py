@@ -23,6 +23,7 @@ import os
 import functools
 import datetime
 
+import sail.metrics
 import bdlb
 # from bdlb.core import plotting
 from baselines.diabetic_retinopathy_diagnosis.temperature_scaling import model
@@ -122,7 +123,7 @@ def main(argv):
   classifier.summary()
   print('********** Output dir: {} ************'.format(out_dir))
 
-  CHKPT_DIR = '/tmp/BDLB/MCdropout/20190705-091825/checkpoints'
+  CHKPT_DIR = 'output/Deterministic/20190705-170745/checkpoints'
   latest = tf.train.latest_checkpoint(CHKPT_DIR)
   print('********** Loading checkpoint weights: {}'.format(latest))
   classifier.load_weights(latest)
@@ -195,7 +196,8 @@ def main(argv):
                                    model=ts_model,
                                    type=FLAGS.uncertainty),
                  dataset=ds_test,
-                 output_dir=os.path.join(out_dir, 'evaluation'))
+                 output_dir=os.path.join(out_dir, 'evaluation'),
+                 additional_metrics=[('ECE', sail.metrics.TFExpectedCalibrationError())])
   print('Temperature: ', ts_layer.temperature.value)
 
   # Check beta distribution
