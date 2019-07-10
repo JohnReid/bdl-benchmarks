@@ -18,3 +18,4 @@ dependencies:
     - tfp-nightly
     - gdown
     - -e .
+    - -e ../..
