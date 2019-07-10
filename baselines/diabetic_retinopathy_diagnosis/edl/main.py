@@ -184,7 +184,7 @@ def main(argv):
     # tf.summary.scalar('global_step', global_step)
     #
     # Training loop: for each batch
-    for batch, (x, y) in enumerate(ds_train.take(10)):
+    for batch, (x, y) in enumerate(ds_train.take(100)):
       # print('x: ', x.shape)
       # print('y: ', y.shape)
       y_one_hot = tf.one_hot(y, depth=2, name="y_one_hot")  # Make one-hot for MSE loss
@@ -230,13 +230,13 @@ def main(argv):
       train_loss_avg.update_state(loss)  # add current batch loss
     #
     # Evaluate on test accuracy
-    # for test_batch, (x, y) in enumerate(ds_test):
-    #   logits = logits_model(x)
-    #   prediction = tf.argmax(logits, axis=1, output_type=y.dtype)
-    #   # print('y: ', y.shape)
-    #   # print('prediction: ', prediction.shape)
-    #   test_accuracy.update_state(prediction, y)
-    #
+    for test_batch, (x, y) in enumerate(ds_test.take(10)):
+       logits = logits_model(x)
+       prediction = tf.argmax(logits, axis=1, output_type=y.dtype)
+       # print('y: ', y.shape)
+       # print('prediction: ', prediction.shape)
+       test_accuracy.update_state(prediction, y)
+
     # Log statistics
     if epoch % 1 == 0:
       template = "Epoch {:03d}: Train loss: {:.3f}, Train entropy: {:.3f}, " \
