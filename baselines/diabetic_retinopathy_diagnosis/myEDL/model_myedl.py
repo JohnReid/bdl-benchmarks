@@ -154,8 +154,6 @@ def VGGDrop(dropout_rate, num_base_filters, learning_rate, l2_reg, input_shape):
 
   optimizer = tfk.optimizers.Adam(learning_rate=learning_rate)
 
-  model.load_weights("/tmp/checkpoints/weights-50.ckpt")
-
   model.compile(loss= loss(),
                 optimizer=optimizer,
                 metrics=metrics())

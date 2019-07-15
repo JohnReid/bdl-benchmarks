@@ -76,7 +76,7 @@ flags.DEFINE_integer(
 )
 flags.DEFINE_integer(
     name="num_epochs",
-    default=0,
+    default=50,
     help="Number of epochs of training over the whole training set.",
 )
 flags.DEFINE_enum(
@@ -123,7 +123,15 @@ def main(argv):
                  learning_rate=FLAGS.learning_rate,
                  l2_reg=FLAGS.l2_reg,
                  input_shape=input_shape)
+
+
+  checkpoint = os.path.join(
+      FLAGS.output_dir,
+      "checkpoints",
+      "weights-50.ckpt")
+
   classifier = VGGDrop(**hparams)
+  classifier.load_weights(checkpoint)
   classifier.summary()
 
   #############
