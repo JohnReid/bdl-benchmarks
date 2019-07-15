@@ -76,7 +76,7 @@ flags.DEFINE_integer(
 )
 flags.DEFINE_integer(
     name="num_epochs",
-    default=50,
+    default=0,
     help="Number of epochs of training over the whole training set.",
 )
 flags.DEFINE_enum(

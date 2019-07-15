@@ -17,6 +17,14 @@ def exp_evidence(logits, clip_value=10.0):
   """Calculate evidence from logits using a clipped exp."""
   return tf.exp(logits/10, name='exp_evidence')
 
+def get_pub(logits, logits2evidence=exp_evidence):
+    ev = logits2evidence(logits)
+    alpha = ev + 1
+    b = alpha / tf.reduce_sum(alpha, axis=1, keepdims=True)
+    p = alpha / tf.reduce_sum(alpha, axis=1, keepdims=True)
+    u = 2.0 / tf.reduce_sum(alpha, axis=1, keepdims=True)
+    return p, u, b
+
 
 def KL(alpha):
   """Calculate the Kullback-Leibler divergence of a Dirichlet(alpha)
@@ -73,12 +81,6 @@ def loss():
       y_hot = tf.one_hot(tf.cast(y[:,0],tf.int32),depth=2)
       return mse_loss(y_hot, alpha)
   return my_loss
-
-def loss1():
-  def my_loss(y, logits):
-      return tf.nn.sigmoid_cross_entropy_with_logits(logits=logits, labels=y)
-  return my_loss
-
 
 def categorical_accuracy(y_true, y_pred):
     if len(y_true.get_shape().as_list()) > 1:

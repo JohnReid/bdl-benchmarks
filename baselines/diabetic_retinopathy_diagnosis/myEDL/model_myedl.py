@@ -19,7 +19,7 @@ from __future__ import division
 from __future__ import print_function
 import tensorflow as tf
 
-from baselines.diabetic_retinopathy_diagnosis.myEDL.edl_utils import loss, metrics
+from baselines.diabetic_retinopathy_diagnosis.myEDL.edl_utils import loss, metrics, get_pub
 
 
 def VGGDrop(dropout_rate, num_base_filters, learning_rate, l2_reg, input_shape):
@@ -151,17 +151,19 @@ def VGGDrop(dropout_rate, num_base_filters, learning_rate, l2_reg, input_shape):
     tfkl.Dense(2, kernel_regularizer=tfk.regularizers.l2(l2_reg)),
     #tfkl.Activation("sigmoid")
   ])
-  model.global_step = tf.Variable(tf.constant(0), trainable=False, name='global_step')
 
+  optimizer = tfk.optimizers.Adam(learning_rate=learning_rate)
+
+  model.load_weights("/tmp/checkpoints/weights-50.ckpt")
 
   model.compile(loss= loss(),
-                optimizer=tfk.optimizers.Adam(learning_rate),
+                optimizer=optimizer,
                 metrics=metrics())
   DiabeticRetinopathyDiagnosisBenchmark.metrics()
 
   return model
 
-def predict(x, model, num_samples, type="entropy"):
+def predict(x, model, type="entropy"):
   """Simple sigmoid uncertainty estimator.
     
   Args:
@@ -188,10 +190,12 @@ def predict(x, model, num_samples, type="entropy"):
   B, _, _, _ = x.shape
 
   # Single forward pass from the deterministic model
-  p = model(x, training=False)
+  logits = model(x, training=False)
+  p,u,b = get_pub(logits=logits)
+
 
   # Bernoulli output distribution
-  dist = scipy.stats.bernoulli(p)
+  dist = scipy.stats.bernoulli(p[:,1])
 
   # Predictive mean calculation
   mean = dist.mean()
