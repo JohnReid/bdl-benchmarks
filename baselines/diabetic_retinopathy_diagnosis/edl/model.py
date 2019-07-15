@@ -30,12 +30,12 @@ tfkb = tfk.backend
 
 def relu_evidence(logits):
   """Calculate evidence from logits using a ReLU."""
-  return tfkl.Activation("relu")(logits, name='relu_evidence')
+  return tf.nn.relu(logits)
 
 
 def exp_evidence(logits, clip_value=10.0):
   """Calculate evidence from logits using a clipped exp."""
-  return tf.exp(tf.clip_by_value(logits, -clip_value, clip_value), name='exp_evidence')
+  return tf.exp(logits/10, name='exp_evidence')
 
 
 def KL(alpha):
@@ -56,7 +56,7 @@ def KL(alpha):
   return tf.reduce_mean(kl)
 
 
-def mse_loss(y, alpha):
+def mse_loss__(y, alpha):
   #
   # alpha sums and means
   S = tf.reduce_sum(alpha, axis=1, keepdims=True, name="S")
@@ -73,6 +73,20 @@ def mse_loss(y, alpha):
   #
   return tf.add(tf.reduce_sum(E, axis=1), tf.reduce_sum(V, axis=1), name='mse_loss')
 
+def mse_loss(y, alpha,epoch):
+    E = alpha - 1
+    S = tf.reduce_sum(alpha, axis=1, keepdims=True)
+    m = alpha / S
+
+    A = tf.reduce_sum((y - m) ** 2, axis=1, keepdims=True)
+    B = tf.reduce_sum(alpha * (S - alpha) / (S * S * (S + 1)), axis=1, keepdims=True)
+
+    annealing_coef = annealing_coefficient(epoch)
+
+    alp = E * (1 - y) + 1
+    C = annealing_coef * KL(alp)
+    return (A + B) + C
+
 
 def loss_regulariser(alpha, other=None):
   """Loss regularisation term (without lambda_t)
@@ -87,7 +101,7 @@ def loss_regulariser(alpha, other=None):
 def annealing_coefficient(epoch):
   """The annealing coefficient grows as the number of epochs to a maximum of 1.
   """
-  coef = tf.minimum(1.0, tf.cast(epoch, tf.float32) / 10)
+  coef = tf.minimum(10.0, tf.cast(epoch, tf.float32) / 10)
   return coef
 
 
@@ -104,15 +118,15 @@ def mse_regularised_loss(y, alpha, lambda_t, sample_weight=None):
 
 def EDL_loss(func=tf.math.digamma):
   """Evidential deep learning loss."""
-  def loss_func(p, alpha, epoch):
+  def loss_func(y, alpha, epoch):
     S = tf.reduce_sum(alpha, axis=1, keepdims=True)
     E = alpha - 1
 
-    A = tf.reduce_mean(tf.reduce_sum(p * (func(S) - func(alpha)), 1, keepdims=True))
+    A = tf.reduce_sum(y * (func(S) - func(alpha)), 1, keepdims=True)
 
     annealing_coef = annealing_coefficient(epoch)
 
-    alp = E * (1 - p) + 1
+    alp = E * (1 - y) + 1
     B = annealing_coef * KL(alp)
 
     return A + B
@@ -141,7 +155,7 @@ def EDL_model(logits, logits_to_evidence=exp_evidence):
 
   #
   # Alpha is the parameter for the Dirichlet, alpha0 is the sum
-  alpha = tf.add(evidence, 1, name='alpha')
+  alpha = tf.add(evidence, 1.0, name='alpha')
   alpha0 = tf.reduce_sum(alpha, axis=1, keepdims=True, name='alpha_zero')
   # tf.summary.histogram('exp_entropy', data=exp_entropy)
   # print('E(H): ', exp_entropy)
@@ -229,11 +243,23 @@ def dirichlet_expected_entropy(alpha):
 def tf_dirichlet_expected_entropy(alpha):
   """The expected entropy of a categorical distribution drawn from Dirichlet(alpha).
   See https://math.stackexchange.com/a/3195376/203036"""
-  from tensorflow.math import digamma
+  #from tensorflow.math import digamma
+  digamma = tf.math.digamma
   A = tf.reduce_sum(alpha, axis=-1, name='A')
   return tf.subtract(digamma(A + 1),
                      tf.reduce_sum(alpha / tf.expand_dims(A, axis=-1) * digamma(alpha + 1), axis=-1),
                      name='exp_entropy')
+
+def tf_dirichlet_expected_entropy_(alpha):
+  """The expected entropy of a categorical distribution drawn from Dirichlet(alpha).
+  See https://math.stackexchange.com/a/3195376/203036"""
+  #from tensorflow.math import digamma
+  digamma = tf.math.digamma
+  A = tf.reduce_sum(alpha, axis=-1, name='A', keepdims=True)
+  m = alpha / A
+  E_ent = tf.reduce_sum(m*tf.subtract(digamma(A + 1), digamma(alpha + 1)), axis=-1,name='exp_entropy')
+
+  return E_ent
 
 
 def test_dirichlet_expected_entropy():
