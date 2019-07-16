@@ -116,7 +116,8 @@ class DiabeticRetinopathyDiagnosisBenchmark(Benchmark):
             y_pred,
             y_uncertainty,
             fractions,
-            lambda y_true, y_pred: metric_fn(y_true, y_pred).numpy(),
+            # leaderboard CSVs have metrics scaled by 100 so multiply by 100 here
+            lambda y_true, y_pred: 100 * metric_fn(y_true, y_pred).numpy(),
             name,
         ) for (metric, metric_fn) in metrics
     }
@@ -131,6 +132,20 @@ class DiabeticRetinopathyDiagnosisBenchmark(Benchmark):
       # save CSVs of evaluation
       for metric, evals in evaluation.items():
         evals.to_csv(os.path.join(output_dir, 'eval-{}.csv'.format(metric)), index=False)
+      #
+      # Create calibration plot if we have access to SAIL
+      try:
+        import sail.metrics as M
+        import matplotlib.pyplot as plt
+        ece = M.ExpectedCalibrationError()
+        actual_freq, expected_freq, bin_size = ece.frequencies(y_true, y_pred)
+        fig, ax = plt.subplots()
+        ece.plot(ax, actual_freq, expected_freq, bin_size)
+        fig.savefig(os.path.join(output_dir, 'calibration.pdf'))
+        #
+      except ImportError:
+        import warnings
+        warnings.warn('Could not import sail.metrics')
 
     # print evaluation
     for metric, evals in evaluation.items():

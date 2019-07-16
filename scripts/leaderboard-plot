@@ -1,0 +1,23 @@
+#!/usr/bin/env python
+
+import bdlb.core.plotting as pl
+import argparse
+
+#
+# Configure arguments
+#
+parser = argparse.ArgumentParser(description='Make leaderboard plots.')
+parser.add_argument('-b', '--benchmark', default='diabetic_retinopathy_diagnosis', help='the benchmark name')
+parser.add_argument('-l', '--leaderboard-dir', default=None, help='the leaderboard directory')
+parser.add_argument('-o', '--output-dir', default='output', help='the output directory')
+
+#
+# Parse arguments
+#
+args = parser.parse_args()
+
+
+#
+# Make plots
+#
+pl.leaderboard(args.benchmark, leaderboard_dir=args.leaderboard_dir, output_dir=args.output_dir)
