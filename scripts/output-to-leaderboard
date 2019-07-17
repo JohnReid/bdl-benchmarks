@@ -35,5 +35,5 @@ with os.scandir(evaluations_dir) as it:
       # Parse filename to extract metric
       metric = head[5:]
       dest = os.path.join(args.leaderboard_dir, metric, method + '.csv')
-      print('Moving: {} -> {}'.format(entry.path, dest))
+      print('Copying: {} -> {}'.format(entry.path, dest))
       shutil.copyfile(entry.path, dest)
