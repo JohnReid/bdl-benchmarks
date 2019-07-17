@@ -19,7 +19,7 @@ from __future__ import division
 from __future__ import print_function
 
 
-def predict(x, model, num_samples, type="entropy"):
+def predict(x, model, type="entropy"):
   """Simple sigmoid uncertainty estimator.
     
   Args:

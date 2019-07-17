@@ -20,6 +20,10 @@ from __future__ import division
 from __future__ import print_function
 
 import os
+os.environ["CUDA_DEVICE_ORDER"]="PCI_BUS_ID"
+os.environ["CUDA_VISIBLE_DEVICES"]="1"
+
+
 import datetime
 import matplotlib.pyplot as plt
 
@@ -91,7 +95,7 @@ flags.DEFINE_integer(
 )
 flags.DEFINE_float(
     name="learning_rate",
-    default=4e-4,
+    default=1e-3,
     help="ADAM optimizer learning rate.",
 )
 flags.DEFINE_float(
@@ -101,10 +105,14 @@ flags.DEFINE_float(
 )
 flags.DEFINE_float(
     name="l2_reg",
-    default=5e-5,
+    default=5e-2,
     help="The L2-regularization coefficient.",
 )
 
+def weight_loss(y_hot, loss, w):
+    weight = tf.reduce_sum(y_hot*tf.expand_dims(w,0), axis=1, keepdims=True)
+    loss_ = tf.reduce_mean(weight*loss)
+    return loss_
 
 def main(argv):
 
@@ -184,7 +192,7 @@ def main(argv):
     # tf.summary.scalar('global_step', global_step)
     #
     # Training loop: for each batch
-    for batch, (x, y) in enumerate(ds_train.take(10)):
+    for batch, (x, y) in enumerate(ds_train):
       # print('x: ', x.shape)
       # print('y: ', y.shape)
       y_one_hot = tf.one_hot(y, depth=2, name="y_one_hot")  # Make one-hot for MSE loss
@@ -200,8 +208,13 @@ def main(argv):
         # Calculate the loss
         alpha_mod = (1 - y_one_hot) * evidence + 1
         regularisation_term = lambda_t * model.loss_regulariser(alpha_mod)
-        mse_term = model.mse_loss(y_one_hot, alpha)
-        loss = mse_term + regularisation_term
+        mse_term = model.EDL_loss()(y_one_hot, alpha, epoch)
+        #mse_term = model.mse_loss(y_one_hot, alpha, epoch)
+        loss = weight_loss(y_one_hot,mse_term, dtask.class_weight())
+        #loss = tf.nn.softmax_cross_entropy_with_logits(logits=logits, labels=y_one_hot)
+        #probs = alpha/tf.reduce_sum(alpha,axis=1,keepdims=True)
+        #loss = tf.reduce_mean(-tf.reduce_sum(y_one_hot * tf.math.log(probs+1e-30), axis=1))
+
         # loss = mse_term
         # print('Loss: ', loss.shape)
         #
@@ -230,13 +243,26 @@ def main(argv):
       train_loss_avg.update_state(loss)  # add current batch loss
     #
     # Evaluate on test accuracy
-    # for test_batch, (x, y) in enumerate(ds_test):
-    #   logits = logits_model(x)
-    #   prediction = tf.argmax(logits, axis=1, output_type=y.dtype)
-    #   # print('y: ', y.shape)
-    #   # print('prediction: ', prediction.shape)
-    #   test_accuracy.update_state(prediction, y)
-    #
+    for test_batch, (x, y) in enumerate(ds_test.take(10)):
+        logits_ = logits_model(x)
+        evidence_ = model.exp_evidence(logits_)
+        tot_ev = tf.reduce_sum(evidence_,axis=1, keepdims=True)
+        prediction = tf.argmax(logits_, axis=1, output_type=y.dtype)
+        probs =  (evidence_+1)/ (tot_ev+2)
+        match = tf.equal(prediction, y)
+        no_match = tf.not_equal(prediction, y)
+        ev_succ = tf.reduce_mean(tf.boolean_mask(tot_ev,match))
+        ev_fail = tf.reduce_mean(tf.boolean_mask(tot_ev, no_match))
+        exp_entropy_ = model.tf_dirichlet_expected_entropy(evidence_+1)
+        u = 2. / (tot_ev+2)
+        u_succ = tf.boolean_mask(u,match)
+        u_fail = tf.boolean_mask(u, no_match)
+        print('u succ:', ev_succ.numpy().mean(), 'ev_fail:', ev_fail.numpy().mean(),
+              'ent:', exp_entropy_.numpy().mean(), 'u:', u.numpy().mean(), 'mean_p:', probs.numpy()[:,0].mean())
+        # print('y: ', y.shape)
+        # print('prediction: ', prediction.shape)
+        test_accuracy.update_state(prediction, y)
+
     # Log statistics
     if epoch % 1 == 0:
       template = "Epoch {:03d}: Train loss: {:.3f}, Train entropy: {:.3f}, " \
