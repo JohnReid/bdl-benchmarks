@@ -321,7 +321,7 @@ class TemperatureScaling(tfkl.Layer):
       if error_after > error_before:
         import warnings
         warnings.warn('Temperature scaling increased the calibration error!')
-        raise ValueError('Temperature scaling increased the calibration error!')
+        # raise ValueError('Temperature scaling increased the calibration error!')
     except NameError:
       import warnings
       warnings.warn('Could not calculate calibration error.')

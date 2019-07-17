@@ -45,6 +45,11 @@ flags.DEFINE_string(
     default='output',
     help="Path to store model, tensorboard and report outputs.",
 )
+flags.DEFINE_string(
+    name="model_dir",
+    default='output/Deterministic/20190717-092955/checkpoints/',
+    help="Path to load model weights from.",
+)
 flags.DEFINE_enum(
     name="level",
     default="medium",
@@ -65,11 +70,6 @@ flags.DEFINE_integer(
     name="num_epochs",
     default=50,
     help="Number of epochs of training over the whole training set.",
-)
-flags.DEFINE_integer(
-    name="num_mc_samples",
-    default=10,
-    help="Number of Monte Carlo samples used for uncertainty estimation.",
 )
 flags.DEFINE_enum(
     name="uncertainty",
@@ -102,8 +102,8 @@ flags.DEFINE_float(
 
 def main(argv):
 
-  print(argv)
-  print(FLAGS)
+  # print(argv)
+  # print(FLAGS)
 
   current_time = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
   out_dir = os.path.join(FLAGS.output_dir, 'TS', current_time)
@@ -119,11 +119,10 @@ def main(argv):
                  l2_reg=FLAGS.l2_reg,
                  input_shape=input_shape)
   classifier = model.VGG(**hparams)
-  classifier.summary()
+  # classifier.summary()
   print('********** Output dir: {} ************'.format(out_dir))
 
-  CHKPT_DIR = 'opt/BDL-benchmarks/output/Deterministic/20190710-120214/checkpoints'
-  latest = tf.train.latest_checkpoint(CHKPT_DIR)
+  latest = tf.train.latest_checkpoint(FLAGS.model_dir)
   print('********** Loading checkpoint weights: {}'.format(latest))
   classifier.load_weights(latest)
 
