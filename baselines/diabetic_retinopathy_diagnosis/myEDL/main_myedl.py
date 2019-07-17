@@ -21,19 +21,18 @@ from __future__ import print_function
 
 
 import os
-
+import datetime
 import functools
-
-from absl import app
-from absl import flags
-from absl import logging
-import tensorflow as tf
-tfk = tf.keras
 
 import bdlb
 from bdlb.core import plotting
 from baselines.diabetic_retinopathy_diagnosis.myEDL.model_myedl import VGGDrop
 from baselines.diabetic_retinopathy_diagnosis.myEDL.model_myedl import predict
+
+from absl import app
+from absl import flags
+import tensorflow as tf
+tfk = tf.keras
 
 
 print("TensorFlow version: {}".format(tf.__version__))
@@ -60,8 +59,13 @@ if gpus:
 FLAGS = flags.FLAGS
 flags.DEFINE_string(
     name="output_dir",
-    default="/tmp",
+    default="output",
     help="Path to store model, tensorboard and report outputs.",
+)
+flags.DEFINE_string(
+    name="model_dir",
+    default=None,
+    help="Path to load model weights from (i.e. a checkpoint directory).",
 )
 flags.DEFINE_enum(
     name="level",
@@ -110,8 +114,11 @@ flags.DEFINE_float(
 
 def main(argv):
 
-  print(argv)
-  print(FLAGS)
+  # print(argv)
+  # print(FLAGS)
+
+  current_time = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
+  out_dir = os.path.join(FLAGS.output_dir, 'EDL', current_time)
 
   ##########################
   # Hyperparmeters & Model #
@@ -124,19 +131,15 @@ def main(argv):
                  l2_reg=FLAGS.l2_reg,
                  input_shape=input_shape)
 
-
-  load_model = False
-
   classifier = VGGDrop(**hparams)
-  classifier.summary()
+  # classifier.summary()
+  print('********** Output dir: {} ************'.format(out_dir))
 
-  if load_model:
+  if FLAGS.model_dir:
       FLAGS.num_epochs = 0
-      checkpoint = os.path.join(
-          FLAGS.output_dir,
-          "checkpoints",
-          "weights-50.ckpt")
-      classifier.load_weights(checkpoint)
+      latest = tf.train.latest_checkpoint(FLAGS.model_dir)
+      print('********** Loading checkpoint weights: {}'.format(latest))
+      classifier.load_weights(latest)
 
   #############
   # Load Task #
@@ -159,33 +162,34 @@ def main(argv):
       class_weight=dtask.class_weight(),
       callbacks=[
           tfk.callbacks.TensorBoard(
-              log_dir=os.path.join(FLAGS.output_dir, "tensorboard"),
+              log_dir=os.path.join(out_dir, "tensorboard"),
               update_freq="epoch",
               write_graph=True,
               histogram_freq=1,
           ),
           tfk.callbacks.ModelCheckpoint(
-              filepath=os.path.join(
-                  FLAGS.output_dir,
-                  "checkpoints",
-                  "weights-{epoch}.ckpt",
-              ),
+              filepath=os.path.join(out_dir, "checkpoints", "weights-{epoch}.ckpt"),
               verbose=1,
               save_weights_only=True,
           )
       ],
   )
-  plotting.tfk_history(history,
-                       output_dir=os.path.join(FLAGS.output_dir, "history"))
+  plotting.tfk_history(history, output_dir=os.path.join(out_dir, "history"))
 
   ##############
   # Evaluation #
   ##############
-  dtask.evaluate(functools.partial(predict,
-                                   model=classifier,
-                                   type=FLAGS.uncertainty),
+  additional_metrics = []
+  try:
+    import sail.metrics
+    additional_metrics.append(('ECE', sail.metrics.GPleissCalibrationError()))
+  except ImportError:
+    import warnings
+    warnings.warn('Could not import SAIL metrics.')
+  dtask.evaluate(functools.partial(predict, model=classifier, type=FLAGS.uncertainty),
                  dataset=ds_test,
-                 output_dir=FLAGS.output_dir)
+                 output_dir=os.path.join(out_dir, 'evaluation'),
+                 additional_metrics=additional_metrics)
 
 
 if __name__ == "__main__":
