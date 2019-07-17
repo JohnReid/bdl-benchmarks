@@ -152,9 +152,11 @@ def VGGDrop(dropout_rate, num_base_filters, learning_rate, l2_reg, input_shape):
     #tfkl.Activation("sigmoid")
   ])
 
+  global_step = tf.compat.v1.train.get_or_create_global_step()
   optimizer = tfk.optimizers.Adam(learning_rate=learning_rate)
+  optimizer.iterations = global_step
 
-  model.compile(loss= loss(),
+  model.compile(loss= loss(global_step),
                 optimizer=optimizer,
                 metrics=metrics())
   DiabeticRetinopathyDiagnosisBenchmark.metrics()
@@ -189,7 +191,7 @@ def predict(x, model, type="entropy"):
 
   # Single forward pass from the deterministic model
   logits = model(x, training=False)
-  p,u,b = get_pub(logits=logits)
+  _, p,u,b = get_pub(logits=logits)
 
 
   # Bernoulli output distribution

@@ -125,14 +125,18 @@ def main(argv):
                  input_shape=input_shape)
 
 
-  checkpoint = os.path.join(
-      FLAGS.output_dir,
-      "checkpoints",
-      "weights-50.ckpt")
+  load_model = False
 
   classifier = VGGDrop(**hparams)
-  classifier.load_weights(checkpoint)
   classifier.summary()
+
+  if load_model:
+      FLAGS.num_epochs = 0
+      checkpoint = os.path.join(
+          FLAGS.output_dir,
+          "checkpoints",
+          "weights-50.ckpt")
+      classifier.load_weights(checkpoint)
 
   #############
   # Load Task #
