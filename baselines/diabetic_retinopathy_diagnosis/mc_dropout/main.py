@@ -110,8 +110,8 @@ flags.DEFINE_float(
 
 def main(argv):
 
-  print(argv)
-  print(FLAGS)
+  # print(argv)
+  # print(FLAGS)
 
   current_time = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
   out_dir = os.path.join(FLAGS.output_dir, 'MCdropout', current_time)
@@ -129,7 +129,7 @@ def main(argv):
                  l2_reg=FLAGS.l2_reg,
                  input_shape=input_shape)
   classifier = VGGDrop(**hparams)
-  classifier.summary()
+  # classifier.summary()
   print('********** Output dir: {} ************'.format(out_dir))
 
   #############

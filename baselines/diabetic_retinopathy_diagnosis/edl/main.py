@@ -108,8 +108,8 @@ flags.DEFINE_float(
 
 def main(argv):
 
-  print(argv)
-  print(FLAGS)
+  # print(argv)
+  # print(FLAGS)
 
   #
   # Logging / tensorboard
