@@ -174,7 +174,7 @@ def main(argv):
   additional_metrics = []
   try:
     import sail.metrics
-    additional_metrics.append(('ECE', sail.metrics.TFExpectedCalibrationError()))
+    additional_metrics.append(('ECE', sail.metrics.GPleissCalibrationError()))
   except ImportError:
     import warnings
     warnings.warn('Could not import SAIL metrics.')
