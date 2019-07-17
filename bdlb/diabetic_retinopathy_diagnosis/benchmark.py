@@ -117,7 +117,7 @@ class DiabeticRetinopathyDiagnosisBenchmark(Benchmark):
             y_uncertainty,
             fractions,
             # leaderboard CSVs have metrics scaled by 100 so multiply by 100 here
-            lambda y_true, y_pred: 100 * metric_fn(y_true, y_pred).numpy(),
+            lambda y_true, y_pred: 100 * metric_fn(y_true, y_pred),
             name,
         ) for (metric, metric_fn) in metrics
     }
