@@ -122,7 +122,7 @@ def main(argv):
   classifier.summary()
   print('********** Output dir: {} ************'.format(out_dir))
 
-  CHKPT_DIR = 'output/Deterministic/20190705-170745/checkpoints'
+  CHKPT_DIR = 'opt/BDL-benchmarks/output/Deterministic/20190710-120214/checkpoints'
   latest = tf.train.latest_checkpoint(CHKPT_DIR)
   print('********** Loading checkpoint weights: {}'.format(latest))
   classifier.load_weights(latest)
@@ -194,7 +194,7 @@ def main(argv):
   additional_metrics = []
   try:
     import sail.metrics
-    additional_metrics.append(('ECE', sail.metrics.TFExpectedCalibrationError()))
+    additional_metrics.append(('ECE', sail.metrics.GPleissCalibrationError()))
   except ImportError:
     import warnings
     warnings.warn('Could not import SAIL metrics.')
@@ -202,16 +202,7 @@ def main(argv):
                  dataset=ds_test,
                  output_dir=os.path.join(out_dir, 'evaluation'),
                  additional_metrics=additional_metrics)
-  print('Temperature: ', ts_layer.temperature.value)
-
-  # Check beta distribution
-  # import numpy as np
-  # import scipy.stats as stats
-  # import pylab as pl
-  # p = np.linspace(0, 1, num=101)
-  # pl.plot(p, stats.beta.pdf(p, a=2, b=5 / 4), '-o')
-  # pl.savefig('beta.png')
-  # # !eog beta.png
+  print('Temperature: ', ts_layer.temperature.value())
 
 
 if __name__ == "__main__":

@@ -283,6 +283,17 @@ class TemperatureScaling(tfkl.Layer):
     valid_loader (DataLoader): validation set loader
     """
     #
+    # Check the calibration error before optimising
+    try:
+      import sail.metrics as me
+      ce = me.GPleissCalibrationError()
+      accuracy, confidence = me.accuracy_and_confidence(tf.argmax(y_true, axis=-1).numpy(), logits.numpy())
+      error_before = ce.error(*ce.frequencies(accuracy, confidence))
+      print('Error before calibration: ', error_before)
+    except ImportError:
+      import warnings
+      warnings.warn('Could not import sail.metrics.')
+    #
     # Create the objective function
     objective = self.create_objective(y_true, logits)
     #
@@ -297,7 +308,22 @@ class TemperatureScaling(tfkl.Layer):
       print(results)
     #
     # Update the temperature
-    print('Optimised temperature: {}'.format(results.position))
-    self.temperature.assign(results.position)
+    new_temperature = results.position
+    print('Optimised temperature: {}'.format(new_temperature))
+    self.temperature.assign(new_temperature)
+    #
+    # Check the calibration error after optimising
+    try:
+      accuracy, confidence = me.accuracy_and_confidence(tf.argmax(y_true, axis=-1).numpy(),
+                                                        logits.numpy() / new_temperature.numpy())
+      error_after = ce.error(*ce.frequencies(accuracy, confidence))
+      print('Error after calibration: ', error_after)
+      if error_after > error_before:
+        import warnings
+        warnings.warn('Temperature scaling increased the calibration error!')
+        raise ValueError('Temperature scaling increased the calibration error!')
+    except NameError:
+      import warnings
+      warnings.warn('Could not calculate calibration error.')
     #
     return self
