@@ -66,7 +66,7 @@ class DiabeticRetinopathyDiagnosisBenchmark(Benchmark):
         self.download_and_prepare()
 
   @classmethod
-  def evaluate(cls, estimator, dataset, output_dir=None, name=None):
+  def evaluate(cls, estimator, dataset, output_dir=None, name=None, additional_metrics=None):
     """Evaluates an `estimator` on the `mode` benchmark dataset.
 
     Args:
@@ -75,13 +75,12 @@ class DiabeticRetinopathyDiagnosisBenchmark(Benchmark):
       dataset: `tf.data.Dataset`, on which dataset to performance evaluation.
       output_dir: (optional) `str`, directory to save figures.
       name: (optional) `str`, the name of the method.
+      additional_metrics: (optional) `list`, additional metrics as (name, metric_fn) tuples to evaluate.
     """
     import inspect
     import tqdm
     import numpy as np
     import tensorflow_datasets as tfds
-    import matplotlib.pyplot as plt
-    COLORS = plt.rcParams['axes.prop_cycle'].by_key()['color']
 
     # Containers used for caching performance evaluation
     y_true = list()
@@ -106,7 +105,9 @@ class DiabeticRetinopathyDiagnosisBenchmark(Benchmark):
     fractions = np.asarray([0.5, 0.6, 0.7, 0.8, 0.9, 1.0])
 
     # Metrics for evaluation
-    metrics = zip(["accuracy", "auc"], cls.metrics())
+    metrics = list(zip(["accuracy", "auc"], cls.metrics()))
+    if additional_metrics is not None:
+      metrics = metrics + additional_metrics
 
     # evaluate
     evaluation = {
@@ -115,16 +116,36 @@ class DiabeticRetinopathyDiagnosisBenchmark(Benchmark):
             y_pred,
             y_uncertainty,
             fractions,
-            lambda y_true, y_pred: metric_fn(y_true, y_pred).numpy(),
+            # leaderboard CSVs have metrics scaled by 100 so multiply by 100 here
+            lambda y_true, y_pred: 100 * metric_fn(y_true, y_pred),
             name,
         ) for (metric, metric_fn) in metrics
     }
 
-    # save JSON of evaluation
     if output_dir is not None:
+      #
+      # save JSON of evaluation
       json_evals = dict((key, val.to_dict(orient='record')) for key, val in evaluation.items())
       os.makedirs(output_dir, exist_ok=True)
       json.dump(json_evals, open(os.path.join(output_dir, 'evaluation.json'), 'w'))
+      #
+      # save CSVs of evaluation
+      for metric, evals in evaluation.items():
+        evals.to_csv(os.path.join(output_dir, 'eval-{}.csv'.format(metric)), index=False)
+      #
+      # Create calibration plot if we have access to SAIL
+      try:
+        import sail.metrics as M
+        import matplotlib.pyplot as plt
+        ece = M.ExpectedCalibrationError()
+        actual_freq, expected_freq, bin_size = ece.frequencies(y_true, y_pred)
+        fig, ax = plt.subplots()
+        ece.plot(ax, actual_freq, expected_freq, bin_size)
+        fig.savefig(os.path.join(output_dir, 'calibration.pdf'))
+        #
+      except ImportError:
+        import warnings
+        warnings.warn('Could not import sail.metrics')
 
     # print evaluation
     for metric, evals in evaluation.items():
@@ -174,9 +195,9 @@ class DiabeticRetinopathyDiagnosisBenchmark(Benchmark):
 
     for i, frac in enumerate(fractions):
       # Keep only the %-frac of lowest uncertainties
-      I = np.zeros(N, dtype=bool)
-      I[I_uncertainties[:int(N * frac)]] = True
-      mean[i] = metric_fn(y_true[I], y_pred[I])
+      idxs = np.zeros(N, dtype=bool)
+      idxs[I_uncertainties[:int(N * frac)]] = True
+      mean[i] = metric_fn(y_true[idxs], y_pred[idxs])
 
     # Store
     df = pd.DataFrame(dict(retained_data=fractions, mean=mean, std=std))
@@ -447,7 +468,7 @@ class DiabeticRetinopathyDiagnosisBenchmark(Benchmark):
   def _ImageDataGenerator_config():
     """Returns the configs for the `tensorflow.keras.preprocessing.image.ImageDataGenerator`,
     used for the random augmentation of the dataset, following the implementation of
-    https://github.com/chleibig/disease-detection/blob/f3401b26aa9b832ff77afe93e3faa342f7d088e5/scripts/inspect_data_augmentation.py."""
+    https://github.com/chleibig/disease-detection/blob/f3401b26aa9b832ff77afe93e3faa342f7d088e5/scripts/inspect_data_augmentation.py."""  # noqa: E501
     augmentation_config = dict(
         featurewise_center=False,
         samplewise_center=False,

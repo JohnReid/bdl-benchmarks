@@ -74,8 +74,7 @@ def leaderboard(benchmark,
   MARKERS = ["o", "D", "s", "8", "^", "*"]
 
   # The assumes path for stored baselines records
-  leaderboard_dir = leaderboard_dir or os.path.join(BDLB_ROOT_DIR,
-                                                    "leaderboard")
+  leaderboard_dir = leaderboard_dir or os.path.join(BDLB_ROOT_DIR, "leaderboard")
   benchmark_dir = os.path.join(leaderboard_dir, benchmark)
   if not os.path.exists(benchmark_dir):
     ValueError("No leaderboard data found at {}".format(benchmark_dir))
@@ -83,14 +82,17 @@ def leaderboard(benchmark,
   # Metrics for which values are stored
   metrics = os.listdir(benchmark_dir)
   for metric in metrics:
+    metric_dir = os.path.join(benchmark_dir, metric)
+    # Ignore files like README.md
+    if not os.path.isdir(metric_dir):
+      continue
     fig, ax = plt.subplots()
     # Iterate over baselines
-    baselines = os.listdir(os.path.join(benchmark_dir, metric))
+    baselines = os.listdir(metric_dir)
     for b, baseline in enumerate(baselines):
       baseline = baseline.replace(".csv", "")
       # Fetch results
-      df = pd.read_csv(
-          os.path.join(benchmark_dir, metric, "{}.csv".format(baseline)))
+      df = pd.read_csv(os.path.join(benchmark_dir, metric, "{}.csv".format(baseline)))
       # Parse columns
       retained_data = df["retained_data"]
       mean = df["mean"]
@@ -129,9 +131,8 @@ def leaderboard(benchmark,
     ax.set(xlabel="retained data", ylabel=metric)
     ax.legend()
     fig.tight_layout()
-    if isinstance(output_dir, str):
+    if output_dir is not None:
       os.makedirs(output_dir, exist_ok=True)
-      fig.savefig(os.path.join(output_dir, "{}.pdf".format(metric)),
-                  trasparent=True,
-                  dpi=300,
-                  format="pdf")
+      figpath = os.path.join(output_dir, "{}.pdf".format(metric))
+      print('Writing: {}'.format(figpath))
+      fig.savefig(figpath, trasparent=True, dpi=300, format="pdf")

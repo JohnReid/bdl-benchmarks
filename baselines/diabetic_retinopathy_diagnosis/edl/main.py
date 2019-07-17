@@ -62,7 +62,7 @@ if gpus:
 FLAGS = flags.FLAGS
 flags.DEFINE_string(
     name="output_dir",
-    default=os.path.join('/tmp', 'BDLB'),
+    default='output',
     help="Path to store model, tensorboard and report outputs.",
 )
 flags.DEFINE_enum(
@@ -116,8 +116,8 @@ def weight_loss(y_hot, loss, w):
 
 def main(argv):
 
-  print(argv)
-  print(FLAGS)
+  # print(argv)
+  # print(FLAGS)
 
   #
   # Logging / tensorboard

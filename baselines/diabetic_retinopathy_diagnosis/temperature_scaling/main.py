@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ==============================================================================
-"""Script for training and evaluating a deterministic baseline for
+"""Script for training and evaluating temperature scaling baseline for
 Diabetic Retinopathy Diagnosis benchmark."""
 
 from __future__ import absolute_import
@@ -24,14 +24,15 @@ import functools
 import datetime
 
 import bdlb
-from bdlb.core import plotting
-from baselines.diabetic_retinopathy_diagnosis.mc_dropout.model import VGGDrop
-from baselines.diabetic_retinopathy_diagnosis.deterministic.model import predict
+# from bdlb.core import plotting
+from baselines.diabetic_retinopathy_diagnosis.temperature_scaling import model
 
 from absl import app
 from absl import flags
 import tensorflow as tf
+tf.__version__
 tfk = tf.keras
+tfkm = tfk.models
 
 bdlb.tf_limit_memory_growth()
 
@@ -41,8 +42,13 @@ bdlb.tf_limit_memory_growth()
 FLAGS = flags.FLAGS
 flags.DEFINE_string(
     name="output_dir",
-    default="output",
+    default='output',
     help="Path to store model, tensorboard and report outputs.",
+)
+flags.DEFINE_string(
+    name="model_dir",
+    default='output/Deterministic/20190717-092955/checkpoints/',
+    help="Path to load model weights from.",
 )
 flags.DEFINE_enum(
     name="level",
@@ -54,6 +60,11 @@ flags.DEFINE_integer(
     name="batch_size",
     default=128,
     help="Batch size used for training.",
+)
+flags.DEFINE_integer(
+    name="max_batches",
+    default=0,
+    help="Maximum number of batches used for training in each epoch.",
 )
 flags.DEFINE_integer(
     name="num_epochs",
@@ -95,7 +106,7 @@ def main(argv):
   # print(FLAGS)
 
   current_time = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
-  out_dir = os.path.join(FLAGS.output_dir, 'Deterministic', current_time)
+  out_dir = os.path.join(FLAGS.output_dir, 'TS', current_time)
 
   ##########################
   # Hyperparmeters & Model #
@@ -107,8 +118,13 @@ def main(argv):
                  learning_rate=FLAGS.learning_rate,
                  l2_reg=FLAGS.l2_reg,
                  input_shape=input_shape)
-  classifier = VGGDrop(**hparams)
+  classifier = model.VGG(**hparams)
   # classifier.summary()
+  print('********** Output dir: {} ************'.format(out_dir))
+
+  latest = tf.train.latest_checkpoint(FLAGS.model_dir)
+  print('********** Loading checkpoint weights: {}'.format(latest))
+  classifier.load_weights(latest)
 
   #############
   # Load Task #
@@ -124,31 +140,52 @@ def main(argv):
   #################
   # Training Loop #
   #################
-  history = classifier.fit(
-      ds_train,
-      epochs=FLAGS.num_epochs,
-      validation_data=ds_validation,
-      class_weight=dtask.class_weight(),
-      callbacks=[
-          tfk.callbacks.TensorBoard(
-              log_dir=os.path.join(out_dir, "tensorboard"),
-              update_freq="epoch",
-              write_graph=True,
-              histogram_freq=1,
-          ),
-          tfk.callbacks.ModelCheckpoint(
-              filepath=os.path.join(
-                  out_dir,
-                  "checkpoints",
-                  "weights-{epoch}.ckpt",
-              ),
-              verbose=1,
-              save_weights_only=True,
-          )
-      ],
-  )
-  plotting.tfk_history(history,
-                       output_dir=os.path.join(out_dir, "history"))
+  # current_time = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
+  # if FLAGS.max_batches > 0:
+  #   train_data = ds_train.take(FLAGS.max_batches)
+  # else:
+  #   train_data = ds_train
+  # history = classifier.fit(
+  #     train_data,
+  #     epochs=FLAGS.num_epochs,
+  #     validation_data=ds_validation,
+  #     class_weight=dtask.class_weight(),
+  #     callbacks=[
+  #         tfk.callbacks.TensorBoard(
+  #             log_dir=os.path.join(out_dir, 'fit'),
+  #             update_freq="epoch",
+  #             write_graph=True,
+  #             histogram_freq=1,
+  #         ),
+  #         tfk.callbacks.ModelCheckpoint(
+  #             filepath=os.path.join(out_dir, "checkpoints", "weights-{epoch}.ckpt"),
+  #             verbose=1,
+  #             save_weights_only=True,
+  #         )
+  #     ],
+  # )
+  # plotting.tfk_history(history, output_dir=os.path.join(out_dir, "history"))
+
+  ########################
+  # Optimise temperature #
+  ########################
+  ts_layer = model.TemperatureScaling()
+  ts_model = tfkm.Sequential([classifier, model.BinaryProbToMulticlass(), ts_layer])
+  #
+  # Calculate logits for test set
+  y_true = []
+  logits = []
+  for x, y in ds_validation:
+    p = classifier(x)
+    logit = tf.math.log(p) - tf.math.log(1 - p)
+    logit_multi = tf.concat([tf.zeros_like(logit), logit], axis=1)
+    logits.append(logit_multi)
+    y_true.append(tf.one_hot(y, depth=2))
+  y_true = tf.concat(y_true, axis=0)
+  logits = tf.concat(logits, axis=0)
+  #
+  # Optimise temperature
+  ts_layer.optimise_temperature(y_true, logits)
 
   ##############
   # Evaluation #
@@ -160,11 +197,14 @@ def main(argv):
   except ImportError:
     import warnings
     warnings.warn('Could not import SAIL metrics.')
-  dtask.evaluate(functools.partial(predict, model=classifier, type=FLAGS.uncertainty),
+  dtask.evaluate(functools.partial(model.predict, model=ts_model, type=FLAGS.uncertainty),
                  dataset=ds_test,
                  output_dir=os.path.join(out_dir, 'evaluation'),
                  additional_metrics=additional_metrics)
+  print('Temperature: ', ts_layer.temperature.value())
 
 
 if __name__ == "__main__":
+  import sys
+  sys.argv = sys.argv[:1]
   app.run(main)

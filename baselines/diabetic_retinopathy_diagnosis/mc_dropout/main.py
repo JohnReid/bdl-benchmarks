@@ -55,7 +55,7 @@ if gpus:
 FLAGS = flags.FLAGS
 flags.DEFINE_string(
     name="output_dir",
-    default=os.path.join('/tmp', 'BDLB'),
+    default='output',
     help="Path to store model, tensorboard and report outputs.",
 )
 flags.DEFINE_enum(
@@ -110,8 +110,8 @@ flags.DEFINE_float(
 
 def main(argv):
 
-  print(argv)
-  print(FLAGS)
+  # print(argv)
+  # print(FLAGS)
 
   current_time = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
   out_dir = os.path.join(FLAGS.output_dir, 'MCdropout', current_time)
@@ -129,7 +129,7 @@ def main(argv):
                  l2_reg=FLAGS.l2_reg,
                  input_shape=input_shape)
   classifier = VGGDrop(**hparams)
-  classifier.summary()
+  # classifier.summary()
   print('********** Output dir: {} ************'.format(out_dir))
 
   #############
@@ -171,12 +171,20 @@ def main(argv):
   ##############
   # Evaluation #
   ##############
+  additional_metrics = []
+  try:
+    import sail.metrics
+    additional_metrics.append(('ECE', sail.metrics.GPleissCalibrationError()))
+  except ImportError:
+    import warnings
+    warnings.warn('Could not import SAIL metrics.')
   dtask.evaluate(functools.partial(predict,
                                    model=classifier,
                                    num_samples=FLAGS.num_mc_samples,
                                    type=FLAGS.uncertainty),
                  dataset=ds_test,
-                 output_dir=os.path.join(out_dir, 'evaluation'))
+                 output_dir=os.path.join(out_dir, 'evaluation'),
+                 additional_metrics=additional_metrics)
 
 
 if __name__ == "__main__":

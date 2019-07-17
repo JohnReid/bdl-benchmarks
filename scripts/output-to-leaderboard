@@ -1,0 +1,39 @@
+#!/usr/bin/env python
+
+"""
+Script to move evaluations from the output directory to the leaderboard.
+"""
+
+import argparse
+import os
+import shutil
+
+#
+# Configure arguments
+parser = argparse.ArgumentParser(description='Move evaluations from the output directory to the leaderboard.')
+parser.add_argument('output_dir', help='the directory that stores the output')
+parser.add_argument('leaderboard_dir', help='the leaderboard directory')
+
+#
+# Parse arguments
+args = parser.parse_args()
+tmp, datetime = os.path.split(os.path.normpath(args.output_dir))
+_, method = os.path.split(tmp)
+print('Method: ', method)
+print('Time: ', datetime)
+
+#
+# Find evaluations
+evaluations_dir = os.path.join(args.output_dir, 'evaluation')
+with os.scandir(evaluations_dir) as it:
+  for entry in it:
+    head, tail = os.path.splitext(entry.name)
+    #
+    # Only process evaluation CSV files
+    if head.startswith('eval-') and '.csv' == tail:
+      #
+      # Parse filename to extract metric
+      metric = head[5:]
+      dest = os.path.join(args.leaderboard_dir, metric, method + '.csv')
+      print('Copying: {} -> {}'.format(entry.path, dest))
+      shutil.copyfile(entry.path, dest)
