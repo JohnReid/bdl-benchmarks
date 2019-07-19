@@ -32,6 +32,7 @@ from absl import flags
 import tensorflow as tf
 tf.__version__
 tfk = tf.keras
+tfkl = tf.keras.layers
 tfkm = tfk.models
 
 bdlb.tf_limit_memory_growth()
@@ -137,49 +138,37 @@ def main(argv):
   )
   ds_train, ds_validation, ds_test = dtask.datasets
 
-  #################
-  # Training Loop #
-  #################
-  # current_time = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
-  # if FLAGS.max_batches > 0:
-  #   train_data = ds_train.take(FLAGS.max_batches)
-  # else:
-  #   train_data = ds_train
-  # history = classifier.fit(
-  #     train_data,
-  #     epochs=FLAGS.num_epochs,
-  #     validation_data=ds_validation,
-  #     class_weight=dtask.class_weight(),
-  #     callbacks=[
-  #         tfk.callbacks.TensorBoard(
-  #             log_dir=os.path.join(out_dir, 'fit'),
-  #             update_freq="epoch",
-  #             write_graph=True,
-  #             histogram_freq=1,
-  #         ),
-  #         tfk.callbacks.ModelCheckpoint(
-  #             filepath=os.path.join(out_dir, "checkpoints", "weights-{epoch}.ckpt"),
-  #             verbose=1,
-  #             save_weights_only=True,
-  #         )
-  #     ],
-  # )
-  # plotting.tfk_history(history, output_dir=os.path.join(out_dir, "history"))
+  ###############
+  # Build model #
+  ###############
+  binary_prob_to_multi = model.BinaryProbToMulticlass()
+  inv_softmax = model.InverseSoftmaxFixedMean(mean=1.)
+  ts_layer = model.TemperatureScaling()
+  multi_to_binary_prob = model.MulticlassToBinaryProb()
+  ts_model = tfkm.Sequential([classifier,
+                              binary_prob_to_multi,
+                              inv_softmax,
+                              ts_layer,
+                              tfkl.Softmax(),
+                              multi_to_binary_prob])
+  ts_model.build(input_shape=hparams['input_shape'])
+  classifier.summary()
+  ts_model.summary()
+  print('classifier: ', classifier.get_layer(1).output_shape)
+  print('ts_model: ', ts_model.get_layer(1).output_shape)
 
   ########################
   # Optimise temperature #
   ########################
-  ts_layer = model.TemperatureScaling()
-  ts_model = tfkm.Sequential([classifier, model.BinaryProbToMulticlass(), ts_layer])
   #
-  # Calculate logits for test set
+  # Calculate logits for validation set
   y_true = []
   logits = []
   for x, y in ds_validation:
     p = classifier(x)
-    logit = tf.math.log(p) - tf.math.log(1 - p)
-    logit_multi = tf.concat([tf.zeros_like(logit), logit], axis=1)
-    logits.append(logit_multi)
+    p_multi = binary_prob_to_multi(p)
+    logit = inv_softmax(p_multi)
+    logits.append(logit)
     y_true.append(tf.one_hot(y, depth=2))
   y_true = tf.concat(y_true, axis=0)
   logits = tf.concat(logits, axis=0)

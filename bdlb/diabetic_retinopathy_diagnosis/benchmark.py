@@ -105,7 +105,7 @@ class DiabeticRetinopathyDiagnosisBenchmark(Benchmark):
     fractions = np.asarray([0.5, 0.6, 0.7, 0.8, 0.9, 1.0])
 
     # Metrics for evaluation
-    metrics = list(zip(["accuracy", "auc"], cls.metrics()))
+    metrics = list(zip(["accuracy", "AUROC", "AUPRC"], cls.metrics()))
     if additional_metrics is not None:
       metrics = metrics + additional_metrics
 
@@ -232,7 +232,9 @@ class DiabeticRetinopathyDiagnosisBenchmark(Benchmark):
     """Evaluation metrics used for monitoring training."""
     import tensorflow as tf
     tfk = tf.keras
-    return [tfk.metrics.BinaryAccuracy(), tfk.metrics.AUC()]
+    return [tfk.metrics.BinaryAccuracy(),
+            tfk.metrics.AUC(curve='ROC'),
+            tfk.metrics.AUC(curve='PR')]
 
   @staticmethod
   def class_weight():

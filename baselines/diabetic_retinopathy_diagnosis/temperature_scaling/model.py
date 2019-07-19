@@ -202,6 +202,50 @@ def predict(x, model, type="entropy"):
   return mean, uncertainty
 
 
+class InverseSoftmaxFixedMean(tfkl.Layer):
+  """
+  A reverse softmax layer that assumes the logits have a given mean.
+  """
+  def __init__(self, mean=0):
+    self.mean = mean
+    super(InverseSoftmaxFixedMean, self).__init__()
+
+  def build(self, input_shape):
+    super(InverseSoftmaxFixedMean, self).build(input_shape)
+
+  def compute_output_shape(self, input_shape):
+    return input_shape
+
+  def call(self, probs):
+    lp = tf.math.log(probs, name='log_probs')
+    lp_mean = tf.reduce_mean(lp, axis=-1, name='lp_mean')
+    adjustment = tf.subtract(lp_mean, tf.constant(self.mean, shape=lp_mean.shape, dtype=lp_mean.dtype),
+                             name='adjustment')
+    logits = tf.subtract(lp, tf.expand_dims(adjustment, axis=-1), name='logits')
+    return logits
+
+
+class MulticlassToBinaryProb(tfkl.Layer):
+  """
+  A Keras layer that takes 2-way classification probabilities and converts them to
+  probabilities of the positive class.
+  """
+
+  def __init__(self):
+    super(MulticlassToBinaryProb, self).__init__()
+
+  def build(self, input_shape):
+    super(MulticlassToBinaryProb, self).build(input_shape)
+
+  def compute_output_shape(self, input_shape):
+    return input_shape[:-1]
+
+  def call(self, probs):
+    result = tf.gather(probs, [1], axis=-1, name='multi_probs')
+    print('result: ', result.shape)
+    return result
+
+
 class BinaryProbToMulticlass(tfkl.Layer):
   """
   A Keras layer that takes binary classification probabilities and converts them to
@@ -212,10 +256,9 @@ class BinaryProbToMulticlass(tfkl.Layer):
     super(BinaryProbToMulticlass, self).__init__()
 
   def build(self, input_shape):
-    super(BinaryProbToMulticlass, self).build(input_shape)  # Be sure to call this at the end
+    super(BinaryProbToMulticlass, self).build(input_shape)
 
   def compute_output_shape(self, input_shape):
-    print('input_shape: ', input_shape)
     return input_shape + (2,)
 
   def call(self, p_pos):
@@ -224,6 +267,33 @@ class BinaryProbToMulticlass(tfkl.Layer):
     # print('p_pos: ', p_pos.shape)
     # print('result: ', result.shape)
     return result
+
+
+def create_temperature_scaling_objective(y_true, logits):
+  """
+  Create an objective function to use to optimise the temperature.
+
+  Args:
+    y_true: the ground truth labels
+    logits: the logits
+
+  Returns:
+    An objective function that returns (NLL, dNLL / dTemp) for a given temperature
+  """
+  def objective(temperature):
+    #
+    # Don't calculate gradients for any variables except for temperature
+    with tf.GradientTape(watch_accessed_variables=False) as tape:
+      tape.watch(temperature)
+      scaled_logits = tf.divide(logits, temperature, name='scaled')
+      loss_per_sample = tfk.losses.categorical_crossentropy(y_true, scaled_logits, from_logits=True)
+      loss = tf.reduce_sum(loss_per_sample, name='loss')
+    grads = tape.gradient(loss, temperature)
+    # print('loss: ', loss.shape)
+    # print('grads: ', grads.shape)
+    return loss, grads
+
+  return objective
 
 
 class TemperatureScaling(tfkl.Layer):
@@ -249,33 +319,6 @@ class TemperatureScaling(tfkl.Layer):
     """
     return tf.divide(logits, self.temperature, name='scaled')
 
-  def create_objective(self, y_true, logits):
-    """
-    Create an objective function to use to optimise the temperature.
-
-    Args:
-      y_true: the ground truth labels
-      logits: the logits
-
-    Returns:
-      An objective function that returns (NLL, dNLL / dTemp) for a given temperature
-    """
-    def objective(temperature):
-      self.temperature.assign(temperature)
-      #
-      # Don't calculate gradients for any variables except for temperature
-      with tf.GradientTape(watch_accessed_variables=False) as tape:
-        tape.watch(self.temperature)
-        scaled_logits = self.call(logits)
-        loss_per_sample = tfk.losses.categorical_crossentropy(y_true, scaled_logits, from_logits=True)
-        loss = tf.reduce_sum(loss_per_sample, name='loss')
-      grads = tape.gradient(loss, self.temperature)
-      # print('loss: ', loss.shape)
-      # print('grads: ', grads.shape)
-      return loss, grads
-
-    return objective
-
   def optimise_temperature(self, y_true, logits):
     """
     Tune the temperature of the model (using the validation set).
@@ -295,21 +338,26 @@ class TemperatureScaling(tfkl.Layer):
       warnings.warn('Could not import sail.metrics.')
     #
     # Create the objective function
-    objective = self.create_objective(y_true, logits)
+    # print('y_true: ', y_true)
+    # print('logits: ', logits)
+    objective = create_temperature_scaling_objective(y_true, logits)
+    # import pickle
+    # pickle.dump((y_true.numpy(), logits.numpy()), open('ts.pkl', 'wb'))
     #
     # Run the optimisation
-    results = tfp.optimizer.bfgs_minimize(objective, self.temperature, max_iterations=50)
-    # print(dir(results))
+    results = tfp.optimizer.lbfgs_minimize(objective, self.temperature, max_iterations=50)
     #
     # Check the results
+    new_temperature = results.position
+    print('# iterations: ', results.num_iterations.numpy())
+    print('# evaluations: ', results.num_objective_evaluations.numpy())
+    print('Optimised temperature: {}'.format(new_temperature.numpy()))
     if not results.converged:
       import warnings
       warnings.warn('LBFGS did not converge')
       print(results)
     #
     # Update the temperature
-    new_temperature = results.position
-    print('Optimised temperature: {}'.format(new_temperature))
     self.temperature.assign(new_temperature)
     #
     # Check the calibration error after optimising
@@ -322,7 +370,7 @@ class TemperatureScaling(tfkl.Layer):
         import warnings
         warnings.warn('Temperature scaling increased the calibration error!')
         # raise ValueError('Temperature scaling increased the calibration error!')
-    except NameError:
+    except NameError:  # This will trigger if `ce` was not created above.
       import warnings
       warnings.warn('Could not calculate calibration error.')
     #
